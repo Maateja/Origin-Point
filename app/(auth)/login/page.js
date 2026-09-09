@@ -96,11 +96,15 @@ function LoginForm() {
         try {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
+            .select("role, onboarding_completed")
             .eq("id", data.user.id)
             .maybeSingle();
 
           if (profile?.role && VALID_ROLES.includes(profile.role)) {
+            if (profile.role === "student" && profile.onboarding_completed !== true) {
+              router.push("/onboarding");
+              return;
+            }
             router.push(`/${profile.role}`);
             return;
           }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { genAI } from "@/lib/ai/gemini";
+import { genAI, getGenAI } from "@/lib/ai/gemini";
 
 interface Question {
   id: number;
@@ -222,9 +222,13 @@ export async function POST(req: Request) {
     }
 
     // Try Gemini AI if available
-    if (genAI && process.env.GEMINI_API_KEY) {
+    const ai = getGenAI();
+    if (ai) {
       try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = ai.getGenerativeModel({
+          model: "gemini-2.5-flash",
+          generationConfig: { responseMimeType: "application/json" },
+        });
         const prompt = `Generate exactly 10 high-quality multiple choice questions (MCQs) for the course "${courseTitle}", module "${moduleTitle}", and subtopic "${subTopicTitle}".
 Format the response strictly as a valid JSON array of objects with the following schema:
 [

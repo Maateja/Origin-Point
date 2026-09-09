@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request) {
   try {
@@ -39,7 +40,6 @@ export async function POST(request) {
       );
     }
 
-    // Generate recovery link using admin client (bypasses broken SMTP mailer)
     const host =
       request.headers.get("x-forwarded-host") ||
       request.headers.get("host") ||
@@ -47,33 +47,34 @@ export async function POST(request) {
     const protocol = request.headers.get("x-forwarded-proto") || "http";
     const redirectUrl = `${protocol}://${host}/auth/callback?next=/reset-password`;
 
-    const { data: linkData, error: linkError } =
-      await admin.auth.admin.generateLink({
-        type: "recovery",
-        email: normalizedEmail,
-        options: {
-          redirectTo: redirectUrl,
-        },
-      });
+    // generateLink only creates a URL; resetPasswordForEmail also dispatches
+    // it through the SMTP provider configured in Supabase Auth.
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      normalizedEmail,
+      { redirectTo: redirectUrl }
+    );
 
-    if (linkError) {
+    if (resetError) {
       return NextResponse.json(
-        { error: linkError.message || "Failed to generate recovery link." },
+        {
+          error:
+            resetError.message ||
+            "Failed to send the password reset email. Please try again.",
+        },
         { status: 500 }
       );
     }
 
-    const actionLink = linkData?.properties?.action_link;
     const isGoogle = user.app_metadata?.provider === "google";
 
     return NextResponse.json({
       success: true,
       email: normalizedEmail,
-      actionLink: actionLink,
       isGoogle: isGoogle,
       message: isGoogle
-        ? "This account was originally registered with Google. You can use the link below to create an email password."
-        : "Password reset link generated successfully.",
+        ? "We sent a password recovery email. It lets you create a password for this Google account."
+        : "Password recovery email sent successfully.",
     });
   } catch (err) {
     console.error("Forgot password route error:", err);

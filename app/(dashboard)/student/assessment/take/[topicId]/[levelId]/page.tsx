@@ -22,9 +22,25 @@ interface Question {
   id: number;
   question: string;
   options: string[];
-  correctAnswer: number;
   explanation: string;
   skillArea?: string;
+  skillKey: string;
+  conceptKey: string;
+  questionType: "conceptual" | "code" | "debugging" | "scenario" | "complexity";
+}
+
+interface SubmissionResult {
+  totalQuestions: number;
+  correctAnswers: number;
+  scorePercent: number;
+  skillPerformance: Array<{ key: string; label: string; correctAnswers: number; totalQuestions: number; scorePercent: number }>;
+  evaluatedQuestions: Array<Question & {
+    chosenAnswer: number;
+    chosenText: string;
+    correctAnswer: number;
+    correctText: string;
+    isCorrect: boolean;
+  }>;
 }
 
 // Map URL param IDs back to human-readable titles
@@ -61,6 +77,10 @@ export default function AssessmentTakePage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
+  const [assessmentId, setAssessmentId] = useState("");
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
   // Fetch questions on mount
@@ -70,11 +90,12 @@ export default function AssessmentTakePage() {
         const res = await fetch("/api/assessment-questions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topicTitle, levelTitle, numQuestions: 10 }),
+          body: JSON.stringify({ topicId, levelId }),
         });
         if (!res.ok) throw new Error("API failed");
         const data = await res.json();
-        if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+        if (data.assessmentId && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+          setAssessmentId(data.assessmentId);
           setQuestions(data.questions);
           setPhase("quiz");
         } else {
@@ -86,83 +107,54 @@ export default function AssessmentTakePage() {
         setPhase("quiz");
       }
     })();
-  }, [topicTitle, levelTitle]);
+  }, [topicId, levelId]);
 
   const handleSelectOption = (questionId: number, optIdx: number) => {
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optIdx }));
   };
 
-  const handleSubmit = () => {
-    if (questions.length === 0) return;
-
-    const evaluated = questions.map((q) => {
-      const chosen = selectedAnswers[q.id];
-      const isCorrect = chosen === q.correctAnswer;
-      return {
-        id: q.id,
-        question: q.question,
-        options: q.options,
-        chosenAnswer: chosen !== undefined ? chosen : -1,
-        chosenText: chosen !== undefined ? q.options[chosen] : "Not answered",
-        correctAnswer: q.correctAnswer,
-        correctText: q.options[q.correctAnswer],
-        isCorrect,
-        explanation: q.explanation,
-        skillArea: q.skillArea ?? "Core Concepts",
-      };
-    });
-
-    const correctCount = evaluated.filter((q) => q.isCorrect).length;
-    const totalCount = evaluated.length;
-    const scorePercent = Math.round((correctCount / totalCount) * 100);
-
-    // Skill breakdown by area
-    const skillGroups: Record<string, { total: number; correct: number }> = {};
-    evaluated.forEach((q) => {
-      const area = q.skillArea;
-      if (!skillGroups[area]) skillGroups[area] = { total: 0, correct: 0 };
-      skillGroups[area].total += 1;
-      if (q.isCorrect) skillGroups[area].correct += 1;
-    });
-
-    const skillBreakdown = Object.entries(skillGroups).map(([skill, stats]) => ({
-      skill,
-      score: Math.round((stats.correct / stats.total) * 100),
-      benchmark: 70,
-      trend: (stats.correct / stats.total >= 0.7 ? "up" : "down") as "up" | "down" | "neutral",
-    }));
-
-    // Gap recommendations
-    const wrongAreas = Array.from(new Set(evaluated.filter((q) => !q.isCorrect).map((q) => q.skillArea)));
-    const gapRecommendations = wrongAreas.slice(0, 4).map((area, i) => ({
-      gap: area,
-      resource: `Practice more ${area} exercises and study the fundamentals`,
-      priority: i === 0 ? "High" : "Medium",
-    }));
-
-    if (gapRecommendations.length === 0) {
-      gapRecommendations.push({
-        gap: topicTitle,
-        resource: "Excellent score! Challenge yourself with the next difficulty level.",
-        priority: "Medium",
+  const handleSubmit = async () => {
+    if (questions.length === 0 || !assessmentId || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      const response = await fetch("/api/assessment/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topicId,
+          levelId,
+          assessmentId,
+          answers: questions.map((question) => ({
+            questionId: question.id,
+            selectedAnswer: selectedAnswers[question.id] ?? null,
+          })),
+        }),
       });
-    }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to submit assessment.");
+      setSubmissionResult(result);
 
-    const reportId = `${topicId}-${levelId}`;
-    const report = {
-      id: reportId,
-      topicId,
-      levelId,
-      topicTitle,
-      levelTitle,
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      scorePercent,
-      correctCount,
-      totalCount,
-      evaluatedQuestions: evaluated,
-      skillBreakdown,
-      gapRecommendations,
-    };
+      const reportId = `${topicId}-${levelId}`;
+      const report = {
+        id: reportId,
+        topicId,
+        levelId,
+        topicTitle,
+        levelTitle,
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        scorePercent: result.scorePercent,
+        correctCount: result.correctAnswers,
+        totalCount: result.totalQuestions,
+        evaluatedQuestions: result.evaluatedQuestions,
+        skillBreakdown: result.skillPerformance.map((skill: SubmissionResult["skillPerformance"][number]) => ({
+          skill: skill.label,
+          score: skill.scorePercent,
+          benchmark: 70,
+          trend: (skill.scorePercent >= 70 ? "up" : "down") as "up" | "down",
+        })),
+        gapRecommendations: [],
+      };
 
     try {
       localStorage.setItem("skillsync_latest_assessment_report", JSON.stringify(report));
@@ -187,7 +179,12 @@ export default function AssessmentTakePage() {
       console.warn("localStorage save failed:", e);
     }
 
-    setPhase("submitted");
+      setPhase("submitted");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to submit assessment.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ─── LOADING ──────────────────────────────────────────────────────────────────
@@ -230,8 +227,7 @@ export default function AssessmentTakePage() {
 
   // ─── SUBMITTED RESULT ─────────────────────────────────────────────────────────
   if (phase === "submitted") {
-    const correctCount = questions.filter((q) => selectedAnswers[q.id] === q.correctAnswer).length;
-    const scorePercent = Math.round((correctCount / questions.length) * 100);
+    const result = submissionResult!;
 
     return (
       <DashboardShell role="student" title="Assessment Complete">
@@ -259,14 +255,14 @@ export default function AssessmentTakePage() {
               <div className="flex items-center justify-center gap-12">
                 <div className="text-center">
                   <span className="block font-display text-4xl font-extrabold text-foreground">
-                    {scorePercent}%
+                    {result.scorePercent}%
                   </span>
                   <span className="text-xs text-muted-foreground">Overall Score</span>
                 </div>
                 <div className="h-10 w-px bg-border" />
                 <div className="text-center">
                   <span className="block font-display text-4xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                    {correctCount}/{questions.length}
+                    {result.correctAnswers}/{result.totalQuestions}
                   </span>
                   <span className="text-xs text-muted-foreground">Correct</span>
                 </div>
@@ -291,9 +287,8 @@ export default function AssessmentTakePage() {
             {/* Quick answer review */}
             <div className="space-y-4">
               <h2 className="font-display text-lg font-bold text-foreground">Quick Answer Review</h2>
-              {questions.map((q, idx) => {
-                const chosen = selectedAnswers[q.id];
-                const isCorrect = chosen === q.correctAnswer;
+              {result.evaluatedQuestions.map((q, idx) => {
+                const isCorrect = q.isCorrect;
                 return (
                   <div
                     key={q.id}
@@ -320,7 +315,7 @@ export default function AssessmentTakePage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/20">
                           <span className="font-bold text-destructive block mb-0.5">Your Answer:</span>
-                          {chosen !== undefined ? q.options[chosen] : "Not answered"}
+                          {q.chosenText}
                         </div>
                         <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                           <span className="font-bold text-emerald-600 dark:text-emerald-400 block mb-0.5">
@@ -495,13 +490,14 @@ export default function AssessmentTakePage() {
               <Button
                 size="sm"
                 onClick={handleSubmit}
-                disabled={answeredCount === 0}
+                disabled={isSubmitting}
                 className="rounded-xl h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs"
               >
-                Submit Assessment
+                {isSubmitting ? "Submitting..." : "Submit Assessment"}
               </Button>
             )}
           </div>
+          {submitError && <p className="text-xs text-destructive text-right">{submitError}</p>}
         </div>
       </div>
     </DashboardShell>

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Variants } from "framer-motion";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase/client";
 
 // Course modules data (8 items => 2 rows of 4)
 const courseModules = [
@@ -172,6 +173,9 @@ export default function SkillAssessmentPage() {
   // Track fully completed courses (starts at 0/10 and increments ONLY when a course is completed fully)
   const [completedCourses, setCompletedCourses] = useState<string[]>([]);
 
+  // Track verified assessment scores per topic
+  const [assessmentScores, setAssessmentScores] = useState<Record<string, number>>({});
+
   useEffect(() => {
     try {
       // 1. Direct fully completed courses
@@ -202,9 +206,50 @@ export default function SkillAssessmentPage() {
       }
 
       setCompletedCourses(finished);
+
+      // 3. Local assessment report
+      const localReportRaw = localStorage.getItem("skillsync_latest_assessment_report");
+      if (localReportRaw) {
+        try {
+          const rep = JSON.parse(localReportRaw);
+          if (rep?.topicId && rep?.percentage !== undefined) {
+            setAssessmentScores((prev) => ({ ...prev, [rep.topicId]: rep.percentage }));
+          }
+        } catch {}
+      }
     } catch (e) {
       console.warn("Could not read completed courses from localStorage:", e);
     }
+
+    // 4. Fetch live scores from Supabase student_profiles
+    async function loadAssessmentScores() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: sp } = await supabase
+            .from("student_profiles")
+            .select("assessment_scores, latest_assessment")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          const scores: Record<string, number> = {};
+          if (sp?.assessment_scores && typeof sp.assessment_scores === "object") {
+            Object.assign(scores, sp.assessment_scores);
+          }
+          if (sp?.latest_assessment?.topicId && sp.latest_assessment.percentage !== undefined) {
+            if (scores[sp.latest_assessment.topicId] === undefined) {
+              scores[sp.latest_assessment.topicId] = sp.latest_assessment.percentage;
+            }
+          }
+          if (Object.keys(scores).length > 0) {
+            setAssessmentScores((prev) => ({ ...prev, ...scores }));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load assessment scores from Supabase:", err);
+      }
+    }
+    loadAssessmentScores();
   }, []);
 
   // Dynamic course progress: starts at 0/8 and increments strictly when a course is fully completed
@@ -397,17 +442,36 @@ export default function SkillAssessmentPage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {assessmentTopics.map((topic) => (
-                      <div
-                        key={topic.id}
-                        onClick={() => setSelectedTopic(topic)}
-                        className="p-8 sm:p-9 rounded-3xl flex items-center justify-center text-center cursor-pointer border border-border/80 bg-card hover:border-primary/60 hover:shadow-md transition-all duration-300 min-h-[140px] group shadow-xs"
-                      >
-                        <h3 className="text-base sm:text-lg font-bold text-foreground group-hover:text-primary transition-colors leading-snug">
-                          {topic.title}
-                        </h3>
-                      </div>
-                    ))}
+                    {assessmentTopics.map((topic) => {
+                      const score = assessmentScores[topic.id];
+                      const isCompleted = score !== undefined;
+                      return (
+                        <div
+                          key={topic.id}
+                          onClick={() => setSelectedTopic(topic)}
+                          className="relative p-7 sm:p-8 rounded-3xl flex flex-col items-center justify-center text-center cursor-pointer border border-border/80 bg-card hover:border-primary/60 hover:shadow-md transition-all duration-300 min-h-[140px] group shadow-xs"
+                        >
+                          {isCompleted && (
+                            <span className="absolute top-3.5 right-3.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[0.65rem] font-bold text-emerald-600 border border-emerald-500/20">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {score}%
+                            </span>
+                          )}
+                          <h3 className="text-base sm:text-lg font-bold text-foreground group-hover:text-primary transition-colors leading-snug">
+                            {topic.title}
+                          </h3>
+                          {isCompleted ? (
+                            <span className="text-[0.7rem] text-emerald-600 font-semibold mt-1">
+                              Certified · Verified
+                            </span>
+                          ) : (
+                            <span className="text-[0.7rem] text-muted-foreground mt-1 group-hover:text-foreground transition-colors">
+                              10 Questions · 4 Levels
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : (

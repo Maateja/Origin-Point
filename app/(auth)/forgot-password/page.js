@@ -35,7 +35,6 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [resendCountdown, setResendCountdown] = useState(0);
-  const [actionLink, setActionLink] = useState("");
   const [isGoogleAccount, setIsGoogleAccount] = useState(false);
 
   const {
@@ -66,7 +65,6 @@ export default function ForgotPasswordPage() {
       }
 
       setSubmittedEmail(email);
-      setActionLink(data.actionLink || "");
       setIsGoogleAccount(data.isGoogle || false);
       setIsSubmitted(true);
       startCountdown();
@@ -119,9 +117,9 @@ export default function ForgotPasswordPage() {
               <KeyRound className="h-7 w-7" />
             </div>
 
-            <h1 className="mb-2 font-display text-2xl font-bold">Reset link ready</h1>
+            <h1 className="mb-2 font-display text-2xl font-bold">Check your email</h1>
             <p className="text-sm leading-relaxed text-muted-foreground mb-4">
-              Password recovery link generated for{" "}
+              We sent a password recovery link to{" "}
               <strong className="text-foreground font-semibold">
                 {submittedEmail}
               </strong>
@@ -130,14 +128,14 @@ export default function ForgotPasswordPage() {
 
             {isGoogleAccount && (
               <div className="mb-4 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs leading-relaxed">
-                <strong>Google Account Detected:</strong> This account was originally registered via Google OAuth. Clicking the reset link below will allow you to set a password so you can sign in using both Google and email/password.
+                <strong>Google Account Detected:</strong> This account was originally registered via Google OAuth. The email link will let you create a password so you can sign in using both Google and email/password.
               </div>
             )}
 
             <div className="rounded-2xl border border-border bg-card/60 p-4 text-xs space-y-2.5 mb-6">
               <div className="flex items-start gap-2 text-muted-foreground">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Click the button below to immediately choose and save your new password.</span>
+                <span>Open the email and follow its link to choose and save your new password. Check your spam folder if it does not appear shortly.</span>
               </div>
             </div>
 
@@ -149,16 +147,6 @@ export default function ForgotPasswordPage() {
             )}
 
             <div className="space-y-3">
-              {actionLink ? (
-                <a
-                  href={actionLink}
-                  className="auth-card-submit w-full h-11 inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-xl text-white shadow-md transition-all hover:opacity-95"
-                >
-                  <span>Reset Password Now</span>
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-              ) : null}
-
               <Button
                 type="button"
                 variant="outline"
@@ -169,14 +157,14 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <span className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    Generating…
+                    Sending…
                   </span>
                 ) : resendCountdown > 0 ? (
                   <span>Request another link in {resendCountdown}s</span>
                 ) : (
                   <span className="flex items-center gap-2">
                     <RotateCw className="h-4 w-4" />
-                    Regenerate Link
+                    Resend Email
                   </span>
                 )}
               </Button>
@@ -196,8 +184,8 @@ export default function ForgotPasswordPage() {
               Forgot your password?
             </h1>
             <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-              Enter your account email below. We&apos;ll create a secure link to reset
-              your password and update your database credentials.
+              Enter your account email below and we&apos;ll send a secure password reset
+              link.
             </p>
 
             {authError && (
@@ -237,7 +225,7 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Generating reset link…
+                    Sending reset email…
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">

@@ -188,6 +188,17 @@ export function RoleOverview({ role = "student" }) {
   const [saved, setSaved] = useState([]);
   const [userName, setUserName] = useState("");
   const [hasAttemptedAssessment, setHasAttemptedAssessment] = useState(false);
+  const [studentStats, setStudentStats] = useState({
+    skillScore: 0,
+    assessmentsCount: 0,
+    profileStrength: 75,
+    department: "",
+    institution: "",
+    latestTopic: "",
+    latestScore: 0,
+    skills: [],
+    onboardingDone: false,
+  });
 
   useEffect(() => {
     // 1. Instant check from localStorage
@@ -206,16 +217,29 @@ export function RoleOverview({ role = "student" }) {
         (c && JSON.parse(c).length > 0)
       );
       setHasAttemptedAssessment(attempted);
+
+      if (r1) {
+        const parsedR1 = JSON.parse(r1);
+        if (parsedR1?.percentage !== undefined) {
+          setStudentStats((prev) => ({
+            ...prev,
+            skillScore: parsedR1.percentage,
+            latestScore: parsedR1.percentage,
+            latestTopic: parsedR1.topicId ? parsedR1.topicId.replace(/-/g, " ") : "Skill",
+            assessmentsCount: Math.max(prev.assessmentsCount, 1),
+          }));
+        }
+      }
     } catch {}
 
-    // 2. Load from Supabase auth session and profiles table
+    // 2. Load from Supabase auth session, profiles, and student_profiles table
     async function loadUser() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name")
+            .select("full_name, headline, location, bio, onboarding_completed")
             .eq("id", user.id)
             .maybeSingle();
 
@@ -231,15 +255,68 @@ export function RoleOverview({ role = "student" }) {
               localStorage.setItem("skillsync_user_name", resolved);
             } catch {}
           }
+
+          if (role === "student") {
+            const { data: sp } = await supabase
+              .from("student_profiles")
+              .select("institution, department, academic_year, self_reported_skills, career_goals, latest_assessment, assessment_scores, overall_skill_score, verified_skills")
+              .eq("id", user.id)
+              .maybeSingle();
+
+            // Calculate profile strength
+            let pScore = 0;
+            if (profile?.full_name?.trim()) pScore += 15;
+            if (profile?.headline?.trim()) pScore += 10;
+            if (sp?.institution?.trim()) pScore += 20;
+            if (sp?.department?.trim()) pScore += 15;
+            if (sp?.academic_year?.trim()) pScore += 10;
+            if (profile?.location?.trim()) pScore += 10;
+            if (profile?.bio?.trim()) pScore += 10;
+            if (sp?.self_reported_skills?.length > 0) pScore += 10;
+            const strength = Math.min(pScore, 100);
+
+            const scoresObj = sp?.assessment_scores && typeof sp.assessment_scores === "object" ? sp.assessment_scores : {};
+            const scoresCount = Object.keys(scoresObj).length;
+            const verifiedCount = Array.isArray(sp?.verified_skills) ? sp.verified_skills.length : 0;
+            const effectiveAssessments = Math.max(scoresCount, verifiedCount, sp?.latest_assessment ? 1 : 0);
+
+            const resolvedScore =
+              sp?.overall_skill_score && sp.overall_skill_score > 0
+                ? sp.overall_skill_score
+                : sp?.latest_assessment?.percentage || 0;
+
+            const latestAssess = sp?.latest_assessment;
+            const isAttempted = Boolean(
+              resolvedScore > 0 ||
+              latestAssess ||
+              effectiveAssessments > 0
+            );
+
+            if (isAttempted) {
+              setHasAttemptedAssessment(true);
+            }
+
+            setStudentStats({
+              skillScore: resolvedScore,
+              assessmentsCount: effectiveAssessments,
+              profileStrength: strength || 70,
+              department: sp?.department || "",
+              institution: sp?.institution || "",
+              latestTopic: latestAssess?.topicId ? latestAssess.topicId.replace(/-/g, " ") : "",
+              latestScore: latestAssess?.percentage || 0,
+              skills: sp?.self_reported_skills || [],
+              onboardingDone: Boolean(profile?.onboarding_completed),
+            });
+          }
         }
       } catch (e) {
-        console.warn("Could not fetch user name for greeting:", e);
+        console.warn("Could not fetch user profile for dashboard:", e);
       }
     }
 
     loadUser();
 
-    // Listen for storage events (in case name updated in profile tab)
+    // Listen for storage events (in case name or assessment updated in another tab)
     const handleStorageChange = () => {
       try {
         const updated = localStorage.getItem("skillsync_user_name");
@@ -256,18 +333,118 @@ export function RoleOverview({ role = "student" }) {
           (c && JSON.parse(c).length > 0)
         );
         setHasAttemptedAssessment(attempted);
+
+        if (r1) {
+          const parsedR1 = JSON.parse(r1);
+          if (parsedR1?.percentage !== undefined) {
+            setStudentStats((prev) => ({
+              ...prev,
+              skillScore: parsedR1.percentage,
+              latestScore: parsedR1.percentage,
+              latestTopic: parsedR1.topicId ? parsedR1.topicId.replace(/-/g, " ") : "Skill",
+              assessmentsCount: Math.max(prev.assessmentsCount, 1),
+            }));
+          }
+        }
       } catch {}
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [role]);
 
   const visibleItems = useMemo(
     () => content.items.filter((entry) => filter === "All" || entry.filter === filter),
     [content.items, filter]
   );
 
-  const greetingDisplay = userName ? `Hello, ${userName}` : "Hello there";
+  // Time-of-day greeting
+  const currentHour = new Date().getHours();
+  const timeGreeting =
+    currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = userName ? userName.split(" ")[0] : "";
+  const greetingDisplay = firstName ? `${timeGreeting}, ${firstName}` : `${timeGreeting}`;
+
+  // Student dynamic metrics
+  const displayMetrics = useMemo(() => {
+    if (role !== "student") return content.metrics;
+    return [
+      {
+        label: "Skill score",
+        value: studentStats.skillScore > 0 ? String(studentStats.skillScore) : (hasAttemptedAssessment ? "70" : "—"),
+        suffix: studentStats.skillScore > 0 || hasAttemptedAssessment ? "%" : "",
+        icon: Target,
+      },
+      {
+        label: "Applications",
+        value: "5",
+        icon: Briefcase,
+      },
+      {
+        label: "Assessments done",
+        value: String(Math.max(studentStats.assessmentsCount, hasAttemptedAssessment ? 1 : 0)),
+        icon: CheckCircle2,
+      },
+      {
+        label: "Profile strength",
+        value: String(studentStats.profileStrength),
+        suffix: "%",
+        icon: Sparkles,
+      },
+    ];
+  }, [role, content.metrics, studentStats, hasAttemptedAssessment]);
+
+  // Student dynamic focus items
+  const displayFocus = useMemo(() => {
+    if (role !== "student") return content.focus;
+    if (!hasAttemptedAssessment) {
+      return [
+        { label: "Take diagnostic skill assessment", detail: "Unlock your verified score and radar chart", href: "/student/assessment" },
+        { label: "Complete your academic profile", detail: "Keep college, department, and bio updated", href: "/student/profile" },
+        { label: "Explore matched opportunities", detail: "Browse curated roles for students", href: "/student/marketplace" },
+      ];
+    }
+    return [
+      {
+        label: "View your assessment report",
+        detail: studentStats.latestScore > 0
+          ? `Scored ${studentStats.latestScore}% in ${studentStats.latestTopic || "assessment"} · Review breakdown`
+          : "Review your detailed skill report and radar",
+        href: "/student/report",
+      },
+      { label: "Explore skill-matched opportunities", detail: "Roles ranked according to your verified score", href: "/student/marketplace" },
+      { label: "Review your verified portfolio", detail: "Showcase earned skill badges to recruiters", href: "/student/portfolio" },
+    ];
+  }, [role, content.focus, hasAttemptedAssessment, studentStats]);
+
+  // Student dynamic activity feed
+  const displayActivity = useMemo(() => {
+    if (role !== "student") return content.activity;
+    const acts = [];
+    if (studentStats.latestTopic && studentStats.latestScore > 0) {
+      acts.push(`Completed ${studentStats.latestTopic} assessment (${studentStats.latestScore}%)`);
+    } else if (hasAttemptedAssessment) {
+      acts.push("Completed diagnostic skill assessment");
+    }
+    if (studentStats.skills.length > 0) {
+      acts.push(`Added ${studentStats.skills.slice(0, 3).join(", ")} to self-reported skills`);
+    }
+    if (studentStats.onboardingDone) {
+      acts.push("Completed student onboarding profile");
+    }
+    if (acts.length === 0) {
+      return content.activity;
+    }
+    return acts;
+  }, [role, content.activity, studentStats, hasAttemptedAssessment]);
+
+  // Eyebrow and headline
+  const studentEyebrow = [studentStats.department, studentStats.institution].filter(Boolean).join(" · ") || content.eyebrow;
+  const studentHeadline = hasAttemptedAssessment
+    ? "Turn your verified skills into top opportunities."
+    : content.headline;
+  const studentDescription = hasAttemptedAssessment
+    ? `Your skill score is certified. Keep taking domain assessments and explore matched roles in the talent marketplace.`
+    : content.description;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="dashboard-page space-y-6">
@@ -277,19 +454,46 @@ export function RoleOverview({ role = "student" }) {
         <div className="relative max-w-3xl">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5" />
-            {content.eyebrow}
+            {role === "student" ? studentEyebrow : content.eyebrow}
           </div>
           <p className="mb-2 text-sm font-medium text-white/70">{greetingDisplay}</p>
-          <h1 className="max-w-2xl font-display text-3xl font-bold tracking-tight md:text-4xl">{content.headline}</h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-white/75 md:text-base">{content.description}</p>
+          <h1 className="max-w-2xl font-display text-3xl font-bold tracking-tight md:text-4xl">
+            {role === "student" ? studentHeadline : content.headline}
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-white/75 md:text-base">
+            {role === "student" ? studentDescription : content.description}
+          </p>
           <div className="mt-7 flex flex-wrap gap-3">
             {role === "student" ? (
-              <Link href="/student/assessment">
-                <Button className="bg-white text-slate-950 shadow-lg hover:bg-white/90">
-                  {hasAttemptedAssessment ? "Continue assessment" : "Start assessment"}
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Button>
-              </Link>
+              hasAttemptedAssessment ? (
+                <>
+                  <Link href="/student/report">
+                    <Button className="bg-white text-slate-950 shadow-lg hover:bg-white/90 font-semibold">
+                      View skill report
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/student/assessment">
+                    <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+                      Take another assessment
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/student/assessment">
+                    <Button className="bg-white text-slate-950 shadow-lg hover:bg-white/90 font-semibold">
+                      Start skill assessment
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/student/marketplace">
+                    <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+                      Explore matches
+                    </Button>
+                  </Link>
+                </>
+              )
             ) : (
               <>
                 <Link href={content.primary.href}>
@@ -309,7 +513,7 @@ export function RoleOverview({ role = "student" }) {
       </motion.section>
 
       <motion.div variants={item} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {content.metrics.map((metric) => <StatCard key={metric.label} {...metric} className="rounded-2xl" />)}
+        {displayMetrics.map((metric) => <StatCard key={metric.label} {...metric} className="rounded-2xl" />)}
       </motion.div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.7fr)]">
@@ -342,7 +546,7 @@ export function RoleOverview({ role = "student" }) {
           <Card className="h-full role-gradient-subtle">
             <CardHeader><CardTitle>{content.focusTitle}</CardTitle><CardDescription>{content.focusDescription}</CardDescription></CardHeader>
             <CardContent className="space-y-2">
-              {content.focus.map((task, index) => <Link key={task.label} href={task.href} className="group flex items-start gap-3 rounded-2xl border border-transparent p-3 transition hover:border-border hover:bg-background/70"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-background text-[0.65rem] font-semibold text-muted-foreground">{index + 1}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{task.label}</span><span className="mt-1 block text-xs text-muted-foreground">{task.detail}</span></span><ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" /></Link>)}
+              {displayFocus.map((task, index) => <Link key={task.label} href={task.href} className="group flex items-start gap-3 rounded-2xl border border-transparent p-3 transition hover:border-border hover:bg-background/70"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-background text-[0.65rem] font-semibold text-muted-foreground">{index + 1}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{task.label}</span><span className="mt-1 block text-xs text-muted-foreground">{task.detail}</span></span><ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" /></Link>)}
               <Link href={`/${role}/profile`} className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-[hsl(var(--role-primary)/0.35)] px-3 py-3 text-xs font-semibold role-text transition hover:bg-background/70"><Sparkles className="h-3.5 w-3.5" />Personalise your workspace</Link>
             </CardContent>
           </Card>
@@ -351,7 +555,7 @@ export function RoleOverview({ role = "student" }) {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <motion.div variants={item}><Card className="h-full"><CardHeader><div className="flex items-center justify-between"><div><CardTitle>{content.insightTitle}</CardTitle><CardDescription>{content.insightDescription}</CardDescription></div><Button variant="ghost" size="icon" aria-label="More insights"><MoreHorizontal className="h-4 w-4" /></Button></div></CardHeader><CardContent><div className="flex items-end justify-between gap-4"><div><p className="font-display text-4xl font-bold tracking-tight">{content.insightValue}</p><p className="mt-1 text-xs text-muted-foreground">{content.insightDetail}</p></div><div className="flex h-16 items-end gap-1.5">{[35, 48, 42, 61, 55, 75, 88].map((height, index) => <motion.span key={index} initial={{ height: 0 }} animate={{ height: `${height}%` }} transition={{ delay: index * 0.05, duration: 0.5 }} className={cn("w-2.5 rounded-full", index === 6 ? "role-gradient" : "bg-muted")} />)}</div></div></CardContent></Card></motion.div>
-        <motion.div variants={item}><Card className="h-full"><CardHeader><CardTitle>{content.activityTitle}</CardTitle><CardDescription>Small wins add up to meaningful progress</CardDescription></CardHeader><CardContent className="space-y-4">{content.activity.map((entry, index) => <div key={entry} className="flex items-start gap-3"><div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full role-bg-soft"><CheckCircle2 className="h-4 w-4 role-text" /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">{entry}</p><p className="mt-1 text-xs text-muted-foreground">{index + 1} {index === 0 ? "hour" : "days"} ago</p></div></div>)}<Link href={`/${role}/profile`} className="flex items-center gap-1 text-xs font-semibold role-text">View workspace activity <ArrowRight className="h-3.5 w-3.5" /></Link></CardContent></Card></motion.div>
+        <motion.div variants={item}><Card className="h-full"><CardHeader><CardTitle>{content.activityTitle}</CardTitle><CardDescription>Small wins add up to meaningful progress</CardDescription></CardHeader><CardContent className="space-y-4">{displayActivity.map((entry, index) => <div key={entry} className="flex items-start gap-3"><div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full role-bg-soft"><CheckCircle2 className="h-4 w-4 role-text" /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">{entry}</p><p className="mt-1 text-xs text-muted-foreground">{index + 1} {index === 0 ? "hour" : "days"} ago</p></div></div>)}<Link href={`/${role}/profile`} className="flex items-center gap-1 text-xs font-semibold role-text">View workspace activity <ArrowRight className="h-3.5 w-3.5" /></Link></CardContent></Card></motion.div>
       </div>
     </motion.div>
   );

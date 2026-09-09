@@ -5,10 +5,11 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { name, email, password, role = "student" } = body;
+        const validRoles = ["student", "industry", "academician", "institution"];
 
-    if (!email || !password) {
+        if (!email || !password || !validRoles.includes(role)) {
       return NextResponse.json(
-        { error: "Email and password are required." },
+            { error: "Valid email, password, and role are required." },
         { status: 400 }
       );
     }
@@ -68,16 +69,16 @@ export async function POST(request) {
     // Upsert into profiles table
     if (user?.id) {
       try {
-        await admin.from("profiles").upsert(
-          {
-            id: user.id,
-            email: normalizedEmail,
-            full_name: normalizedName,
-            role: role,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
+        const profileValues = {
+          id: user.id,
+          email: normalizedEmail,
+          full_name: normalizedName,
+          role,
+          updated_at: new Date().toISOString(),
+        };
+        if (role === "student") profileValues.onboarding_completed = false;
+
+        await admin.from("profiles").upsert(profileValues, { onConflict: "id" });
       } catch (profileErr) {
         console.warn("Could not write profile during signup:", profileErr);
       }

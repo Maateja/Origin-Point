@@ -57,7 +57,7 @@ const roleOptions = [
     gradient: "from-indigo-500 to-cyan-400",
     badgeColor:
       "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
-    redirect: "/student",
+    redirect: "/onboarding",
   },
   {
     id: "industry",

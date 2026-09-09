@@ -1,7 +1,36 @@
 import { NextResponse } from "next/server";
-import { genAI } from "@/lib/ai/gemini";
+import { z } from "zod";
+import { genAI, getGenAI } from "@/lib/ai/gemini";
+import { createClient } from "@/lib/supabase/server";
+import { createDiagnosticAssessmentSnapshot } from "@/lib/diagnostic-assessment-sessions";
+import {
+  DIAGNOSTIC_LEVELS,
+  diagnosticTaxonomy,
+  getDiagnosticConcept,
+  getDiagnosticSkill,
+  getDiagnosticTopic,
+  type DiagnosticLevelId,
+  type DiagnosticTopicId,
+} from "@/lib/diagnostic-taxonomy";
+import {
+  getDiagnosticBlueprint,
+  type DiagnosticBlueprint,
+  type DiagnosticQuestionType,
+} from "@/lib/diagnostic-blueprints";
 
 interface AssessmentQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+  skillKey: string;
+  conceptKey: string;
+  questionType: DiagnosticQuestionType;
+  skillArea: string;
+}
+
+interface LegacyAssessmentQuestion {
   id: number;
   question: string;
   options: string[];
@@ -10,8 +39,153 @@ interface AssessmentQuestion {
   skillArea: string;
 }
 
+const diagnosticTopicIds = new Set<DiagnosticTopicId>(
+  diagnosticTaxonomy.map((topic) => topic.id as DiagnosticTopicId),
+);
+const diagnosticLevelIds = new Set<DiagnosticLevelId>(
+  DIAGNOSTIC_LEVELS.map((level) => level.id),
+);
+
+function resolveDiagnosticSelection(topicId: unknown, levelId: unknown) {
+  if (
+    typeof topicId !== "string" ||
+    !diagnosticTopicIds.has(topicId as DiagnosticTopicId) ||
+    typeof levelId !== "string" ||
+    !diagnosticLevelIds.has(levelId as DiagnosticLevelId)
+  ) {
+    throw new Error("A valid diagnostic topicId and levelId are required.");
+  }
+
+  const resolvedTopicId = topicId as DiagnosticTopicId;
+  const resolvedLevelId = levelId as DiagnosticLevelId;
+  return {
+    topicId: resolvedTopicId,
+    levelId: resolvedLevelId,
+    topic: getDiagnosticTopic(resolvedTopicId),
+    level: DIAGNOSTIC_LEVELS.find((item) => item.id === resolvedLevelId)!,
+    blueprint: getDiagnosticBlueprint(resolvedTopicId, resolvedLevelId),
+  };
+}
+
+function getBlueprintSlots(blueprint: DiagnosticBlueprint) {
+  return blueprint.allocations.flatMap((allocation) =>
+    Array.from({ length: allocation.questionCount }, () => allocation),
+  );
+}
+
+function validateGeneratedQuestions(
+  value: unknown,
+  blueprint: DiagnosticBlueprint,
+): AssessmentQuestion[] {
+  let list: any[] = [];
+  if (Array.isArray(value)) {
+    list = value;
+  } else if (value && typeof value === "object" && Array.isArray((value as any).questions)) {
+    list = (value as any).questions;
+  } else {
+    throw new Error("Invalid response structure from AI model.");
+  }
+
+  const slots = getBlueprintSlots(blueprint);
+  if (list.length < blueprint.totalQuestions) {
+    throw new Error(`Expected ${blueprint.totalQuestions} questions, received ${list.length}.`);
+  }
+
+  return slots.map((slot, index) => {
+    const item = list[index];
+    if (!item || typeof item.question !== "string") {
+      throw new Error(`Question ${index + 1} is missing text.`);
+    }
+
+    if (!Array.isArray(item.options) || item.options.length !== 4) {
+      throw new Error(`Question ${index + 1} must have exactly 4 options.`);
+    }
+
+    const options = item.options.map((opt: any) => String(opt).trim());
+    if (new Set(options).size !== 4) {
+      throw new Error(`Question ${index + 1} options must be distinct.`);
+    }
+
+    let correctAnswer = Number(item.correctAnswer);
+    if (isNaN(correctAnswer) || correctAnswer < 0 || correctAnswer > 3) {
+      correctAnswer = 0;
+    }
+
+    return {
+      id: index + 1,
+      question: item.question.trim(),
+      options,
+      correctAnswer,
+      explanation: typeof item.explanation === "string" && item.explanation.trim().length > 0
+        ? item.explanation.trim()
+        : `The correct option is: ${options[correctAnswer]}`,
+      skillKey: slot.skillKey,
+      conceptKey: slot.conceptKey,
+      questionType: slot.questionType,
+      skillArea: getDiagnosticSkill(slot.skillKey)?.label || slot.skillKey,
+    };
+  });
+}
+
+function buildFallbackQuestions(
+  topicTitle: string,
+  blueprint: DiagnosticBlueprint,
+): AssessmentQuestion[] {
+  return getBlueprintSlots(blueprint).map((allocation, index) => {
+    const concept = getDiagnosticConcept(allocation.conceptKey);
+    const conceptLabel = concept?.label || allocation.conceptKey;
+    const correctStatement = concept?.description || `A core mechanism and foundational principle of ${conceptLabel}.`;
+
+    const distractorBank = [
+      `Bypasses memory allocation checks, executing directly in kernel mode without safeguards.`,
+      `Acts strictly as a static visual styling rule, having no influence on runtime logic.`,
+      `Requires synchronous single-threaded blocking across all distributed nodes.`,
+      `Stores state in an ephemeral hardware cache that is cleared upon function completion.`,
+      `Forces a compile-time assertion that disables asynchronous network requests.`,
+      `Directs hardware bus arbitration for local peripheral devices.`,
+      `Treats all input arguments as immutable bitmasks with no type safety.`,
+      `Restricts execution to background tasks, disallowing interactive user invocation.`,
+    ];
+
+    const d1 = distractorBank[(index * 2) % distractorBank.length];
+    const d2 = distractorBank[(index * 2 + 1) % distractorBank.length];
+    const d3 = distractorBank[(index * 2 + 3) % distractorBank.length];
+
+    const options = [correctStatement, d1, d2, d3];
+    const correctPos = (index + 1) % 4;
+    const temp = options[correctPos];
+    options[correctPos] = options[0];
+    options[0] = temp;
+
+    const questionTemplates = [
+      `In ${topicTitle}, what is the primary purpose and behavior of ${conceptLabel}?`,
+      `When working with ${conceptLabel} in ${topicTitle}, which of the following statements is accurate?`,
+      `Which of the following best describes how ${conceptLabel} functions within an application?`,
+      `What architectural role does ${conceptLabel} fulfill in modern ${topicTitle} systems?`,
+    ];
+    const question = questionTemplates[index % questionTemplates.length];
+
+    return {
+      id: index + 1,
+      question,
+      options,
+      correctAnswer: correctPos,
+      explanation: `${conceptLabel}: ${correctStatement}`,
+      skillKey: allocation.skillKey,
+      conceptKey: allocation.conceptKey,
+      questionType: allocation.questionType,
+      skillArea: getDiagnosticSkill(allocation.skillKey)?.label || allocation.skillKey,
+    };
+  });
+}
+
+function parseGeneratedJson(text: string): unknown {
+  const cleaned = text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  return JSON.parse(cleaned);
+}
+
 // Curated high quality technical fallback questions strictly tailored by level
-function getCuratedQuestions(topic: string, level: string): AssessmentQuestion[] {
+function getCuratedQuestions(topic: string, level: string): LegacyAssessmentQuestion[] {
   const normalizedLevel = level.toLowerCase();
 
   // 1. VERY BEGINNER: Very very basic definitions, terminology, simple 1-line syntax
@@ -557,7 +731,7 @@ function getCuratedQuestions(topic: string, level: string): AssessmentQuestion[]
   ];
 }
 
-export async function POST(req: Request) {
+async function legacyAssessmentQuestions(req: Request) {
   try {
     let body: any = {};
     try {
@@ -674,6 +848,145 @@ Do not use markdown backticks.`;
     return NextResponse.json(
       { error: "Failed to generate assessment questions" },
       { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profileError || profile?.role !== "student") {
+      return NextResponse.json({ error: "Only students may take diagnostic assessments." }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const selection = resolveDiagnosticSelection(body?.topicId, body?.levelId);
+    const { topic, level, blueprint } = selection;
+    const slots = getBlueprintSlots(blueprint);
+    const allocationInstructions = blueprint.allocations.map((allocation) => {
+      const concept = getDiagnosticConcept(allocation.conceptKey);
+      return {
+        skillKey: allocation.skillKey,
+        conceptKey: allocation.conceptKey,
+        concept: concept?.label,
+        conceptDescription: concept?.description,
+        questionCount: allocation.questionCount,
+        questionType: allocation.questionType,
+      };
+    });
+    const generationContract = JSON.stringify({
+      topicId: selection.topicId,
+      levelId: selection.levelId,
+      totalQuestions: blueprint.totalQuestions,
+      allocations: allocationInstructions,
+    });
+    const outputShape = `[
+  {
+    "id": 1,
+    "question": "Question text",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswer": 0,
+    "explanation": "Why this is correct",
+    "skillKey": "${slots[0].skillKey}",
+    "conceptKey": "${slots[0].conceptKey}",
+    "questionType": "${slots[0].questionType}"
+  }
+]`;
+    const systemPrompt = `You are a technical assessment question writer.
+The application controls the topic, level, skill keys, concept keys, question counts, and question types.
+Generate exactly ${blueprint.totalQuestions} questions in the allocation order below.
+For every question, copy skillKey, conceptKey, and questionType exactly from its allocation. Never invent or rename them.
+Each question must have exactly four distinct options and exactly one correct option.
+Question type constraints: conceptual tests understanding; code uses a short code or implementation example; debugging diagnoses a defect; scenario presents an engineering situation; complexity asks about efficiency or trade-offs.
+Return only a raw JSON array with no markdown.
+Controlled assessment contract:
+${generationContract}
+Required object shape:
+${outputShape}`;
+
+    const userPrompt = `Generate the ${blueprint.totalQuestions} questions for ${topic.title} at ${level.title}. Use only the supplied allocations and keep the exact allocation order.`;
+
+    const createQuestionResponse = (questions: AssessmentQuestion[], source: string) => {
+      const assessmentId = createDiagnosticAssessmentSnapshot({
+        userId: user.id,
+        topicId: selection.topicId,
+        levelId: selection.levelId,
+        blueprintId: blueprint.blueprintId,
+        questions,
+      });
+      return NextResponse.json({
+        assessmentId,
+        source,
+        topicTitle: topic.title,
+        levelTitle: level.title,
+        // Correct answers remain in the server-side snapshot until submission.
+        questions: questions.map(({ correctAnswer: _correctAnswer, ...question }) => question),
+      });
+    };
+    const acceptProviderOutput = (value: unknown, source: string) =>
+      createQuestionResponse(validateGeneratedQuestions(value, blueprint), source);
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            temperature: 0.7,
+
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content?.trim() || "";
+          return acceptProviderOutput(parseGeneratedJson(content), "openai");
+        }
+      } catch (error) {
+        console.warn("OpenAI output rejected; trying the next source:", error);
+      }
+    }
+
+    const ai = getGenAI();
+    if (ai) {
+      try {
+        const model = ai.getGenerativeModel({
+          model: "gemini-2.5-flash",
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.4,
+          },
+        });
+        const result = await model.generateContent(`${systemPrompt}\n${userPrompt}`);
+        return acceptProviderOutput(parseGeneratedJson(result.response.text()), "gemini-ai");
+      } catch (error) {
+        console.warn("Gemini output rejected; using the deterministic fallback:", error);
+      }
+    }
+
+    return createQuestionResponse(buildFallbackQuestions(topic.title, blueprint), "taxonomy-fallback");
+  } catch (error) {
+    console.error("Assessment questions endpoint error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to generate assessment questions" },
+      { status: 400 },
     );
   }
 }

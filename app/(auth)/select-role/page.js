@@ -100,7 +100,7 @@ function SelectRoleContent() {
           setCurrentUser(user);
           const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
+            .select("role, onboarding_completed")
             .eq("id", user.id)
             .maybeSingle();
           if (profile?.role) {
@@ -158,7 +158,7 @@ function SelectRoleContent() {
         );
         await supabase.auth.updateUser({ data: { role: roleId } });
       }
-      router.push(activeRole.redirect || `/${roleId}`);
+      router.push(roleId === "student" ? "/onboarding" : activeRole.redirect || `/${roleId}`);
     } catch (err) {
       console.error("Failed to set role:", err);
       router.push(activeRole.redirect || `/${roleId}`);
@@ -173,7 +173,7 @@ function SelectRoleContent() {
     router.push("/login");
   };
 
-  const { icon: Icon, accent, subtitle, desc, features } = activeRole;
+  const { Icon, accent, subtitle, desc, features } = activeRole;
 
   return (
     /* Full-screen dark cinematic shell matching the landing page */

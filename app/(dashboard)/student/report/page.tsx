@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase/client";
 
 interface EvaluatedQuestion {
   id: number;
@@ -78,33 +79,80 @@ export default function SkillReportPage() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const allSavedRaw = localStorage.getItem("skillsync_all_assessment_reports");
-      const latestSavedRaw = localStorage.getItem("skillsync_latest_assessment_report");
-
+    async function loadReports() {
       let reports: AssessmentReport[] = [];
 
-      if (allSavedRaw) {
-        const parsed = JSON.parse(allSavedRaw);
-        if (Array.isArray(parsed)) {
-          reports = parsed;
+      try {
+        const allSavedRaw = localStorage.getItem("skillsync_all_assessment_reports");
+        const latestSavedRaw = localStorage.getItem("skillsync_latest_assessment_report");
+
+        if (allSavedRaw) {
+          const parsed = JSON.parse(allSavedRaw);
+          if (Array.isArray(parsed)) {
+            reports = parsed;
+          }
         }
+
+        // If allSaved was empty or missing but latest exists, ensure it is included
+        if (reports.length === 0 && latestSavedRaw) {
+          const parsed = JSON.parse(latestSavedRaw);
+          if (parsed && parsed.scorePercent !== undefined) {
+            reports = [parsed];
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load completed assessment reports from localStorage:", e);
       }
 
-      // If allSaved was empty or missing but latest exists, ensure it is included
-      if (reports.length === 0 && latestSavedRaw) {
-        const parsed = JSON.parse(latestSavedRaw);
-        if (parsed && parsed.scorePercent !== undefined) {
-          reports = [parsed];
+      // Check Supabase student_profiles if no reports found in localStorage
+      if (reports.length === 0) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: sp } = await supabase
+              .from("student_profiles")
+              .select("latest_assessment")
+              .eq("id", user.id)
+              .maybeSingle();
+
+            if (sp?.latest_assessment && (sp.latest_assessment as any).scorePercent !== undefined) {
+              const la = sp.latest_assessment as any;
+              const remoteReport: AssessmentReport = {
+                id: `${la.topicId || "quiz"}-${la.levelId || "test"}`,
+                topicTitle: la.topicTitle || "Diagnostic Assessment",
+                levelTitle: la.levelTitle || "Assessment",
+                date: la.submittedAt
+                  ? new Date(la.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                  : "Recent",
+                scorePercent: la.scorePercent,
+                correctCount: la.correctAnswers,
+                totalCount: la.totalQuestions,
+                evaluatedQuestions: la.evaluatedQuestions || [],
+                skillBreakdown: (la.skillPerformance || []).map((sp: any) => ({
+                  skill: sp.label || sp.key,
+                  score: sp.scorePercent || 0,
+                  benchmark: 70,
+                  trend: (sp.scorePercent || 0) >= 70 ? "up" : "down",
+                })),
+                gapRecommendations: [],
+              };
+              reports = [remoteReport];
+              try {
+                localStorage.setItem("skillsync_all_assessment_reports", JSON.stringify(reports));
+                localStorage.setItem("skillsync_latest_assessment_report", JSON.stringify(remoteReport));
+              } catch {}
+            }
+          }
+        } catch (dbErr) {
+          console.warn("Could not fetch remote reports from student_profiles:", dbErr);
         }
       }
 
       setCompletedReports(reports);
-    } catch (e) {
-      console.warn("Failed to load completed assessment reports from localStorage:", e);
-    } finally {
       setIsLoaded(true);
     }
+
+    loadReports();
   }, []);
 
   // Aggregate overall skill breakdown across all taken assessments

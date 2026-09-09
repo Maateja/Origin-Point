@@ -16,11 +16,15 @@ export async function GET(request) {
     if (session) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, onboarding_completed")
         .eq("id", session.user.id)
         .single();
-      
-      const dashboard = profile?.role ? `/${profile.role}` : "/select-role";
+
+      const dashboard = profile?.role === "student" && profile.onboarding_completed !== true
+        ? "/onboarding"
+        : profile?.role
+          ? `/${profile.role}`
+          : "/select-role";
       return NextResponse.redirect(`${origin}${nextParam || dashboard}`);
     }
     
@@ -41,7 +45,7 @@ export async function GET(request) {
     // 2. Check if user already has an established profile and role
     const { data: existingProfile } = await supabase
       .from("profiles")
-      .select("id, role, full_name")
+      .select("id, role, full_name, onboarding_completed")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -81,7 +85,11 @@ export async function GET(request) {
       { onConflict: "id" }
     );
 
-    // 4. Determine destination
+    // 4. Determine destination. Recovery was handled before profile routing.
+    if (assignedRole === "student" && existingProfile?.onboarding_completed !== true) {
+      return NextResponse.redirect(`${origin}/onboarding`);
+    }
+
     if (nextParam && nextParam !== "/student") {
       return NextResponse.redirect(`${origin}${nextParam}`);
     }
@@ -97,14 +105,17 @@ export async function GET(request) {
     if (fallbackData?.user) {
       const { data: fallbackProfile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, onboarding_completed")
         .eq("id", fallbackData.user.id)
         .maybeSingle();
 
       const fallbackRole = fallbackProfile?.role;
       if (fallbackRole && VALID_ROLES.includes(fallbackRole)) {
         // Already authenticated — send straight to dashboard
-        return NextResponse.redirect(`${origin}/${fallbackRole}`);
+        const destination = fallbackRole === "student" && fallbackProfile.onboarding_completed !== true
+          ? "/onboarding"
+          : `/${fallbackRole}`;
+        return NextResponse.redirect(`${origin}${destination}`);
       }
       // Authenticated but no role yet — pick a role
       return NextResponse.redirect(`${origin}/select-role`);

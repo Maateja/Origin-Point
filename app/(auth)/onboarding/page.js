@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -19,12 +19,14 @@ import {
   Brain,
   CheckCircle2,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { OriginWordmark } from "@/components/shared/origin-logo";
+import { supabase } from "@/lib/supabase/client";
 
 const allSkills = [
   { name: "JavaScript", icon: Code2, category: "frontend" },
@@ -70,6 +72,91 @@ export default function OnboardingPage() {
     selectedGoals: [],
   });
   const [direction, setDirection] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  useEffect(() => {
+    async function loadOnboarding() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role, onboarding_completed")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Could not load profiles row:", {
+            code: profileError.code,
+            message: profileError.message,
+            details: profileError.details,
+            hint: profileError.hint,
+          });
+          setAuthError("Could not load your account profile. Please verify the profiles onboarding column, then refresh.");
+          return;
+        }
+        if (profile?.role !== "student") {
+          router.replace(profile?.role ? `/${profile.role}` : "/select-role");
+          return;
+        }
+        if (profile.onboarding_completed === true) {
+          router.replace("/student");
+          return;
+        }
+
+        const { data: studentProfile, error: studentProfileError } = await supabase
+          .from("student_profiles")
+          .select("institution, department, academic_year, location, self_reported_skills, career_goals")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (studentProfileError) {
+          console.error("Could not load student_profiles row:", {
+            code: studentProfileError.code,
+            message: studentProfileError.message,
+            details: studentProfileError.details,
+            hint: studentProfileError.hint,
+          });
+          setAuthError("Could not load your student profile. Please verify the student profile table and RLS policy, then refresh.");
+          return;
+        }
+        if (studentProfile) {
+          let selectedGoals = [];
+          try {
+            const parsedGoals = JSON.parse(studentProfile.career_goals || "[]");
+            selectedGoals = Array.isArray(parsedGoals) ? parsedGoals : [];
+          } catch {
+            selectedGoals = studentProfile.career_goals
+              ? studentProfile.career_goals.split(",").map((goal) => goal.trim()).filter(Boolean)
+              : [];
+          }
+
+          setFormData((current) => ({
+            ...current,
+            institution: studentProfile.institution || "",
+            department: studentProfile.department || "",
+            year: studentProfile.academic_year || "",
+            location: studentProfile.location || "",
+            selectedSkills: studentProfile.self_reported_skills || [],
+            selectedGoals,
+          }));
+        }
+      } catch (error) {
+        console.error("Could not load onboarding:", error);
+        setAuthError("Could not load your onboarding details. Please refresh and try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadOnboarding();
+  }, [router]);
 
   const step = steps[currentStep];
   const progress = ((currentStep + 1) / steps.length) * 100;
@@ -105,6 +192,62 @@ export default function OnboardingPage() {
     }));
   };
 
+  const getRecommendedDiagnostic = () => {
+    const skillToTopicMap = {
+      JavaScript: { topicId: "web-dev", name: "Web Development" },
+      React: { topicId: "web-dev", name: "Web Development" },
+      TypeScript: { topicId: "web-dev", name: "Web Development" },
+      "Node.js": { topicId: "web-dev", name: "Web Development" },
+      Python: { topicId: "dsa", name: "Programming & DSA" },
+      Java: { topicId: "dsa", name: "Programming & DSA" },
+      SQL: { topicId: "db-sql", name: "Database & SQL" },
+      "Data Analysis": { topicId: "db-sql", name: "Database & SQL" },
+      "Machine Learning": { topicId: "ai-ml", name: "Artificial Intelligence & ML" },
+      "Cloud/AWS": { topicId: "cloud-devops", name: "Cloud & DevOps" },
+      Flutter: { topicId: "web-dev", name: "Web Development" },
+      "UI/UX Design": { topicId: "web-dev", name: "Web Development" },
+    };
+
+    for (const skill of formData.selectedSkills) {
+      if (skillToTopicMap[skill]) {
+        return skillToTopicMap[skill];
+      }
+    }
+    return { topicId: "web-dev", name: "Web Development" };
+  };
+
+  const completeOnboarding = async (destination = "/student") => {
+    setIsSaving(true);
+    setAuthError("");
+
+    try {
+      const response = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          institution: formData.institution,
+          department: formData.department,
+          academic_year: formData.year,
+          location: formData.location,
+          selectedSkills: formData.selectedSkills,
+          selectedGoals: formData.selectedGoals,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        setAuthError(data.error || "Could not save your onboarding details.");
+        return;
+      }
+
+      router.replace(destination);
+    } catch (error) {
+      setAuthError(error.message || "Could not save your onboarding details. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const variants = {
     enter: (dir) => ({ x: dir > 0 ? 80 : -80, opacity: 0 }),
     center: { x: 0, opacity: 1 },
@@ -113,6 +256,12 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {isLoading ? (
+        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+          Loading your onboarding...
+        </div>
+      ) : (
+        <>
       {/* Top progress */}
       <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-muted">
         <motion.div
@@ -149,6 +298,12 @@ export default function OnboardingPage() {
       {/* Step content */}
       <div className="flex-1 flex items-center justify-center pt-14 pb-20 px-6">
         <div className="w-full max-w-lg">
+          {authError && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
           <AnimatePresence custom={direction} mode="wait">
             <motion.div
               key={step.id}
@@ -375,13 +530,25 @@ export default function OnboardingPage() {
                     )}
                   </div>
 
-                  <Button
-                    onClick={() => router.push("/student")}
-                    className="bg-gradient-to-r from-indigo-500 to-cyan-400 text-white border-0 hover:opacity-90 h-12 px-8"
-                  >
-                    Go to Dashboard
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Button
+                      onClick={() => completeOnboarding(`/student/assessment/take/${getRecommendedDiagnostic().topicId}/beginner`)}
+                      disabled={isSaving}
+                      className="w-full sm:w-auto bg-gradient-to-r from-indigo-500 to-cyan-400 text-white border-0 hover:opacity-90 h-12 px-6 shadow-md cursor-pointer"
+                    >
+                      {isSaving ? "Saving..." : `Start ${getRecommendedDiagnostic().name} Test`}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => completeOnboarding("/student")}
+                      disabled={isSaving}
+                      className="w-full sm:w-auto h-12 px-6 border-border/80 hover:bg-muted cursor-pointer"
+                    >
+                      Go to Dashboard (Take Later)
+                    </Button>
+                  </div>
                 </div>
               )}
             </motion.div>
@@ -406,6 +573,8 @@ export default function OnboardingPage() {
             </Button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
