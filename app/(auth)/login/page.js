@@ -149,18 +149,18 @@ function LoginForm() {
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: trimmed,
-        options: {
-          shouldCreateUser: false, // login only — don't create new accounts
-        },
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, mode: "login" }),
       });
+      const resData = await res.json();
 
-      if (error) {
-        if (error.message?.toLowerCase().includes("user not found") || error.status === 422) {
+      if (!res.ok || resData.error) {
+        if (res.status === 404) {
           setEmailError("No account found for this email. Please sign up first.");
         } else {
-          setEmailError(error.message || "Failed to send code. Please try again.");
+          setEmailError(resData.error || "Failed to send code. Please try again.");
         }
         setIsLoading(false);
         return;
@@ -244,12 +244,14 @@ function LoginForm() {
     setOtpError("");
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: { shouldCreateUser: false },
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), mode: "login" }),
       });
-      if (error) {
-        setOtpError(error.message || "Failed to resend code.");
+      const resData = await res.json();
+      if (!res.ok || resData.error) {
+        setOtpError(resData.error || "Failed to resend code.");
       } else {
         startTimer();
         setNotice({ type: "success", msg: "A new code has been sent to your email." });

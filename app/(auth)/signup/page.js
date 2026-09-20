@@ -257,28 +257,27 @@ function SignUpForm() {
     const normalizedName = values.name.trim();
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          shouldCreateUser: true, // create account if new
-          data: {
-            full_name: normalizedName,
-            role: selectedRole,
-          },
-        },
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          name: normalizedName,
+          role: selectedRole,
+          mode: "signup",
+        }),
       });
+      const resData = await res.json();
 
-      if (error) {
-        setAuthError(error.message || "Failed to send verification code. Please try again.");
+      if (!res.ok || resData.error) {
+        setAuthError(resData.error || "Failed to send verification code. Please try again.");
         setIsLoading(false);
         return;
       }
 
       setPendingEmail(normalizedEmail);
       setPendingName(normalizedName);
-      try {
-        localStorage.setItem("skillsync_user_name", normalizedName);
-      } catch {}
+      try { localStorage.setItem("skillsync_user_name", normalizedName); } catch {}
       setStep(3);
       startTimer();
       setNotice({ type: "success", msg: `Code sent to ${normalizedEmail}` });
@@ -361,12 +360,19 @@ function SignUpForm() {
     setOtpError("");
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: pendingEmail,
-        options: { shouldCreateUser: true, data: { full_name: pendingName, role: selectedRole } },
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: pendingEmail,
+          name: pendingName,
+          role: selectedRole,
+          mode: "signup",
+        }),
       });
-      if (error) {
-        setOtpError(error.message || "Failed to resend code.");
+      const resData = await res.json();
+      if (!res.ok || resData.error) {
+        setOtpError(resData.error || "Failed to resend code.");
       } else {
         startTimer();
         setNotice({ type: "success", msg: "A new code has been sent to your email." });
