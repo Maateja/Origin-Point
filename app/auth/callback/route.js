@@ -6,92 +6,59 @@ const VALID_ROLES = ["student", "industry", "academician", "institution"];
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type"); // "email" | "recovery" | "signup" | etc.
   const nextParam = searchParams.get("next");
+  const mode = searchParams.get("mode") || "login";
+  const queryRole = searchParams.get("role");
 
   const supabase = await createClient();
 
-  // If there's no code, check if we have a session already (handles PKCE verifier mismatch)
-  if (!code) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", session.user.id)
-        .single();
-      
-      const dashboard = profile?.role ? `/${profile.role}` : "/select-role";
-      return NextResponse.redirect(`${origin}${nextParam || dashboard}`);
-    }
-    
-    const errorDescription = searchParams.get("error_description") || "auth_failed";
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(errorDescription)}`);
-  }
+  // ── A) OTP / Magic-link email verification (token_hash flow) ────────────
+  // This is triggered when the user clicks the link in the OTP email instead
+  // of typing the 6-digit code directly in the app.
+  if (tokenHash && type) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type, // "email" | "signup" | "recovery" | "invite"
+    });
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data?.user) {
+      const { user } = data;
 
-  if (!error && data?.user) {
-    const { user } = data;
+      // Password recovery — redirect to reset-password page
+      if (type === "recovery") {
+        return NextResponse.redirect(`${origin}/reset-password`);
+      }
 
-    // 1. If this was a password recovery callback, forward directly to reset-password
-    if (nextParam && nextParam.startsWith("/reset-password")) {
-      return NextResponse.redirect(`${origin}${nextParam}`);
+      return await handleAuthSuccess({ supabase, user, origin, mode, queryRole, nextParam });
     }
 
-    // 2. Check if user already has an established profile and role
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id, role, full_name")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const mode = searchParams.get("mode") || "login";
-    const queryRole = searchParams.get("role");
-
-    const resolvedRole =
-      existingProfile?.role ||
-      (mode === "signup" ? (queryRole || user.user_metadata?.role) : null);
-
-    // If user came through LOGIN flow but has no registered profile/role, redirect to role selection
-    if (mode === "login" && (!resolvedRole || !VALID_ROLES.includes(resolvedRole))) {
-      return NextResponse.redirect(`${origin}/select-role?intent=signup`);
-    }
-
-    const assignedRole = resolvedRole && VALID_ROLES.includes(resolvedRole) ? resolvedRole : (queryRole || "student");
-    const userFullName =
-      user.user_metadata?.full_name ||
-      user.user_metadata?.name ||
-      existingProfile?.full_name ||
-      user.email?.split("@")[0] ||
-      "User";
-
-    // 3. Upsert base profile info while preserving or updating role
-    await supabase.from("profiles").upsert(
-      {
-        id: user.id,
-        email: user.email,
-        full_name: userFullName,
-        avatar_url:
-          user.user_metadata?.avatar_url ||
-          user.user_metadata?.picture ||
-          null,
-        role: assignedRole,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" }
+    // Token verification failed
+    const errorDescription = error?.message || "auth_failed";
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent(errorDescription)}`
     );
-
-    // 4. Determine destination
-    if (nextParam && nextParam !== "/student") {
-      return NextResponse.redirect(`${origin}${nextParam}`);
-    }
-
-    return NextResponse.redirect(`${origin}/${assignedRole}`);
   }
 
-  // --- FALLBACK: exchangeCodeForSession failed (e.g. PKCE verifier mismatch on first attempt) ---
-  // If the user already has a valid session (from a just-completed signup or prior auth),
-  // redirect them to their dashboard instead of bouncing them to the error/login page.
+  // ── B) OAuth / PKCE code exchange (Google, etc.) ─────────────────────────
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (!error && data?.user) {
+      const { user } = data;
+
+      // If this was a password recovery callback
+      if (nextParam?.startsWith("/reset-password")) {
+        return NextResponse.redirect(`${origin}${nextParam}`);
+      }
+
+      return await handleAuthSuccess({ supabase, user, origin, mode, queryRole, nextParam });
+    }
+  }
+
+  // ── C) Fallback — check if user already has a valid session ─────────────
+  // (handles PKCE verifier mismatch, double-click on email link, etc.)
   try {
     const { data: fallbackData } = await supabase.auth.getUser();
     if (fallbackData?.user) {
@@ -103,10 +70,8 @@ export async function GET(request) {
 
       const fallbackRole = fallbackProfile?.role;
       if (fallbackRole && VALID_ROLES.includes(fallbackRole)) {
-        // Already authenticated — send straight to dashboard
         return NextResponse.redirect(`${origin}/${fallbackRole}`);
       }
-      // Authenticated but no role yet — pick a role
       return NextResponse.redirect(`${origin}/select-role`);
     }
   } catch (_) {
@@ -117,4 +82,57 @@ export async function GET(request) {
   return NextResponse.redirect(
     `${origin}/login?error=${encodeURIComponent(errorDescription)}`
   );
+}
+
+// ─── Shared post-auth routing helper ─────────────────────────────────────────
+async function handleAuthSuccess({ supabase, user, origin, mode, queryRole, nextParam }) {
+  // Check existing profile
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id, role, full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const resolvedRole =
+    existingProfile?.role ||
+    (mode === "signup" ? queryRole || user.user_metadata?.role : null);
+
+  // Login flow with no registered role → pick a role
+  if (mode === "login" && (!resolvedRole || !VALID_ROLES.includes(resolvedRole))) {
+    return NextResponse.redirect(`${origin}/select-role?intent=signup`);
+  }
+
+  const assignedRole =
+    resolvedRole && VALID_ROLES.includes(resolvedRole)
+      ? resolvedRole
+      : queryRole || "student";
+
+  const userFullName =
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    existingProfile?.full_name ||
+    user.email?.split("@")[0] ||
+    "User";
+
+  // Upsert base profile
+  await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      email: user.email,
+      full_name: userFullName,
+      avatar_url:
+        user.user_metadata?.avatar_url ||
+        user.user_metadata?.picture ||
+        null,
+      role: assignedRole,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" }
+  );
+
+  if (nextParam && !nextParam.startsWith(`/${assignedRole}`)) {
+    return NextResponse.redirect(`${origin}${nextParam}`);
+  }
+
+  return NextResponse.redirect(`${origin}/${assignedRole}`);
 }
