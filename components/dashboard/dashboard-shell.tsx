@@ -13,15 +13,22 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-export function DashboardShell({ role = "student", title, children }: DashboardShellProps) {
+export function DashboardShell({
+  role = "student",
+  title,
+  children,
+}: DashboardShellProps) {
   return (
     <RoleProvider defaultRole={role}>
-      <div data-role={role} className="dashboard-frame min-h-screen bg-background">
+      <div
+        data-role={role}
+        className="dashboard-frame min-h-screen bg-background"
+      >
         {/* Sidebar (desktop) */}
         <Sidebar role={role} />
 
         {/* Main content area */}
-        <div 
+        <div
           className={cn("dashboard-content-shell flex min-h-screen flex-col")}
         >
           <TopBar role={role} title={title} />

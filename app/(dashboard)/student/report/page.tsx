@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { usePlatformData } from "@/lib/platform-store";
+import { DataState } from "@/components/platform/primitives";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -13,7 +14,13 @@ import {
   Sparkles,
   Award,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
@@ -74,72 +81,43 @@ const item = {
 
 export default function SkillReportPage() {
   const router = useRouter();
-  const [completedReports, setCompletedReports] = useState<AssessmentReport[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const state = usePlatformData();
+  const completedReports =
+    state.data?.reports.filter((r) => r.userId === state.data?.profile.id) ??
+    [];
+  const isLoaded = !!state.data;
+  if (state.loading || state.error)
+    return (
+      <DashboardShell role="student" title="Skill Report">
+        <DataState {...state} retry={state.refresh} />
+      </DashboardShell>
+    );
 
-  useEffect(() => {
-    try {
-      const allSavedRaw = localStorage.getItem("skillsync_all_assessment_reports");
-      const latestSavedRaw = localStorage.getItem("skillsync_latest_assessment_report");
-
-      let reports: AssessmentReport[] = [];
-
-      if (allSavedRaw) {
-        const parsed = JSON.parse(allSavedRaw);
-        if (Array.isArray(parsed)) {
-          reports = parsed;
-        }
-      }
-
-      // If allSaved was empty or missing but latest exists, ensure it is included
-      if (reports.length === 0 && latestSavedRaw) {
-        const parsed = JSON.parse(latestSavedRaw);
-        if (parsed && parsed.scorePercent !== undefined) {
-          reports = [parsed];
-        }
-      }
-
-      setCompletedReports(reports);
-    } catch (e) {
-      console.warn("Failed to load completed assessment reports from localStorage:", e);
-    } finally {
-      setIsLoaded(true);
-    }
-  }, []);
-
-  // Aggregate overall skill breakdown across all taken assessments
-  const overallSkillsMap = new Map<string, { totalScore: number; count: number; benchmark: number }>();
-  completedReports.forEach((r) => {
-    r.skillBreakdown?.forEach((sb) => {
-      const existing = overallSkillsMap.get(sb.skill);
-      if (existing) {
-        existing.totalScore += sb.score;
-        existing.count += 1;
-      } else {
-        overallSkillsMap.set(sb.skill, {
-          totalScore: sb.score,
-          count: 1,
-          benchmark: sb.benchmark || 70,
-        });
-      }
+  // Different employers can use different targets; never average them together.
+  const latestSkills = new Map<
+    string,
+    { score: SkillScore; reportId: string }
+  >();
+  [...completedReports]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .forEach((report) => {
+      report.skillBreakdown.forEach((score) => {
+        const key = score.skill.trim().toLowerCase();
+        if (!latestSkills.has(key))
+          latestSkills.set(key, { score, reportId: report.id });
+      });
     });
-  });
-
-  const overallSkills: SkillScore[] = Array.from(overallSkillsMap.entries()).map(([skill, data]) => {
-    const avg = Math.round(data.totalScore / data.count);
-    return {
-      skill,
-      score: avg,
-      benchmark: data.benchmark,
-      trend: avg >= data.benchmark ? "up" : "down",
-    };
-  });
-
+  const overallSkills: SkillScore[] = Array.from(latestSkills.values()).map(
+    (item) => item.score,
+  );
   // Aggregate unique gap recommendations across all taken assessments
   const overallGapsMap = new Map<string, GapRec>();
   completedReports.forEach((r) => {
     r.gapRecommendations?.forEach((g) => {
-      if (!overallGapsMap.has(g.gap)) {
+      if (
+        !overallGapsMap.has(g.gap) &&
+        latestSkills.get(g.gap.trim().toLowerCase())?.reportId === r.id
+      ) {
         overallGapsMap.set(g.gap, g);
       }
     });
@@ -148,8 +126,12 @@ export default function SkillReportPage() {
 
   return (
     <DashboardShell role="student" title="Skill Report">
-      <motion.div variants={container} initial="hidden" animate="show" className="space-y-8 pb-16">
-
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="space-y-8 pb-16"
+      >
         {/* 1. Overall Header: Clean, unboxed text directly on page */}
         <motion.div variants={item}>
           <div className="py-2 space-y-2">
@@ -157,7 +139,9 @@ export default function SkillReportPage() {
               Your Skill Report
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-2xl">
-              Overall skill proficiency evaluated strictly from your completed assessment modules. Click on any completed assessment below to open its dedicated report and review your answers.
+              Recorded performance and evidence from your completed assessment
+              modules. Click on any completed assessment below to open its
+              dedicated report and review your answers.
             </p>
           </div>
         </motion.div>
@@ -174,7 +158,9 @@ export default function SkillReportPage() {
                   No Assessments Completed Yet
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Your skill report is generated directly from your assessment attempts. Complete an assessment module to see your verified score, skill breakdown, and gap recommendations.
+                  Your skill report is generated directly from your assessment
+                  attempts. Complete an assessment module to see your recorded
+                  score, skill breakdown, and gap recommendations.
                 </p>
               </div>
               <Link href="/student/assessment">
@@ -187,18 +173,19 @@ export default function SkillReportPage() {
           </motion.div>
         )}
 
-
-
         {/* 4. "Completed" Section: ONLY contains assessments user has actually completed */}
         {completedReports.length > 0 && (
           <motion.div variants={item} className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                <h2 className="font-display text-xl font-bold text-foreground">Completed</h2>
+                <h2 className="font-display text-xl font-bold text-foreground">
+                  Completed
+                </h2>
               </div>
               <span className="text-xs text-muted-foreground">
-                Click any block to open its dedicated page and view question breakdown
+                Click any block to open its dedicated page and view question
+                breakdown
               </span>
             </div>
 
@@ -217,7 +204,8 @@ export default function SkillReportPage() {
                       {r.topicTitle}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      Completed on {r.date}
+                      Completed on{" "}
+                      {new Date(r.date).toLocaleDateString("en-IN")}
                     </p>
                   </div>
 
@@ -237,14 +225,17 @@ export default function SkillReportPage() {
           </motion.div>
         )}
 
-        {/* 5. Overall Skill Breakdown (Aggregated from completed assessments) */}
+        {/* 5. Latest Competency Results (Aggregated from completed assessments) */}
         {overallSkills.length > 0 && (
           <motion.div variants={item}>
             <Card className="rounded-3xl border-border/80 shadow-xs">
               <CardHeader className="p-6 sm:p-7 pb-2">
-                <CardTitle className="text-lg font-bold">Overall Skill Breakdown</CardTitle>
+                <CardTitle className="text-lg font-bold">
+                  Overall Skill Breakdown
+                </CardTitle>
                 <CardDescription className="text-xs">
-                  Your aggregated performance benchmark across all completed assessment topics
+                  Your aggregated practice performance across all completed
+                  assessment topics
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-6 sm:p-7 pt-4 space-y-6">
@@ -252,13 +243,21 @@ export default function SkillReportPage() {
                   <div key={s.skill} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-foreground">{s.skill}</span>
-                        {s.trend === "up" && <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
-                        {s.trend === "down" && <TrendingDown className="h-3.5 w-3.5 text-destructive" />}
-                        {s.trend === "neutral" && <Minus className="h-3.5 w-3.5 text-muted-foreground" />}
+                        <span className="text-sm font-semibold text-foreground">
+                          {s.skill}
+                        </span>
+                        {s.trend === "up" && (
+                          <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                        )}
+                        {s.trend === "down" && (
+                          <TrendingDown className="h-3.5 w-3.5 text-destructive" />
+                        )}
+                        {s.trend === "neutral" && (
+                          <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>Benchmark: {s.benchmark}%</span>
+                        <span>Assessment target: {s.benchmark}%</span>
                         <span className="font-display font-extrabold text-foreground text-sm">
                           {s.score}%
                         </span>
@@ -275,7 +274,9 @@ export default function SkillReportPage() {
                         transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
                         className={cn(
                           "h-full rounded-full",
-                          s.score >= s.benchmark ? "bg-emerald-500" : "bg-primary"
+                          s.score >= s.benchmark
+                            ? "bg-emerald-500"
+                            : "bg-primary",
                         )}
                       />
                     </div>
@@ -291,9 +292,12 @@ export default function SkillReportPage() {
           <motion.div variants={item}>
             <Card className="rounded-3xl border-border/80 shadow-xs">
               <CardHeader className="p-6 sm:p-7 pb-2">
-                <CardTitle className="text-lg font-bold">Overall Skill Gap Recommendations</CardTitle>
+                <CardTitle className="text-lg font-bold">
+                  Next Learning Priorities
+                </CardTitle>
                 <CardDescription className="text-xs">
-                  Targeted improvement areas identified from your completed assessment modules
+                  Targeted improvement areas identified from your completed
+                  assessment modules
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-6 sm:p-7 pt-4 space-y-3.5">
@@ -304,20 +308,24 @@ export default function SkillReportPage() {
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-foreground">{rec.gap}</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {rec.gap}
+                        </p>
                         <Badge
                           variant="secondary"
                           className={cn(
                             "text-[0.62rem] rounded-full px-2 py-0 font-semibold",
                             rec.priority === "High"
                               ? "bg-red-500/10 text-red-600 border border-red-500/20"
-                              : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                              : "bg-amber-500/10 text-amber-600 border border-amber-500/20",
                           )}
                         >
                           {rec.priority} Priority
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{rec.resource}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {rec.resource}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -325,7 +333,6 @@ export default function SkillReportPage() {
             </Card>
           </motion.div>
         )}
-
       </motion.div>
     </DashboardShell>
   );

@@ -1,172 +1,72 @@
-# Origin Point (formerly SkillSync)
-### *Next-Generation Academia–Industry Collaboration & Skill Intelligence Portal*
+# Origin Point
 
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat&logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-18-blue?style=flat&logo=react)](https://react.js.org/)
-[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20DB-3ECF8E?style=flat&logo=supabase)](https://supabase.com/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?style=flat&logo=tailwind-css)](https://tailwindcss.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+Academia–industry collaboration portal for students, industry, academicians, and institutions.
 
----
+## Data policy
 
-## 📌 Executive Summary
+All account and workflow records are stored in Supabase PostgreSQL. Uploaded evidence is stored in a private Supabase Storage bucket. There are no seeded accounts, employers, opportunities, applications, scores, or dashboard metrics, and no localStorage business-data fallback. An empty database produces honest empty states; a missing migration produces a setup error.
 
-**Origin Point** bridges the widening divide between academic training and enterprise talent requirements. By providing an intelligent, unified workspace for **Students**, **Industry Recruiters**, **Academicians**, and **Institutions**, Origin Point enables real-time skill benchmarking, project collaborations, automated assessment pathways, and verified talent pipelines.
+The two authored curriculum tracks in `lib/courses-data.ts` are educational content, not user activity. Progress is saved only after a real assessment submission. Gemini-generated questions are explicitly labelled practice: they are not industry-approved exams or verified certifications.
 
----
+## Implemented workflows
 
-## 👥 Role Portals & Capabilities
+- Role-specific profiles for students, industry, faculty, and institutions, including names, organizations, interests, skills, and credentials.
+- Portfolio records for certifications, projects, education, experience, achievements, and documents. Evidence remains self-reported unless independently verified by an administrator.
+- Publishing internships, jobs, apprenticeships, training, workshops, mentorship, FDPs, faculty internships, consultancy, research, and live projects.
+- Saved opportunities, skill-overlap recommendations, duplicate-safe applications, recruitment stages, feedback, and completion progress.
+- Student and faculty institution-membership requests, institution approval, and analytics based on actual approved-member activity.
+- Server-generated practice assessments, private answer keys, server-side scoring, immutable submissions, reports, and per-subtopic learning progress.
+- JSON exports and responsive role-themed workspaces with loading, error, and empty states.
 
-| Portal | Target Audience | Core Capabilities |
-| :--- | :--- | :--- |
-| **Student** | Learners & Job Seekers | • AI-powered diagnostic skill assessments<br>• Structured topic & course learning tracks<br>• Real-time code/concept verification & detailed progress reports<br>• Cryptographically verifiable portfolio & career matching |
-| **Industry** | Recruiters & Engineering Leads | • Role-specific skill gap insights<br>• Direct talent sourcing with verified benchmark metrics<br>• Internship & technical project pipelines |
-| **Academician** | Faculty & Mentors | • Student progress tracking & cohort skill diagnostics<br>• Inter-institutional research matchmaking<br>• Faculty Development Program (FDP) & grant tracking |
-| **Institution** | Universities & Leadership | • Departmental placement & readiness analytics<br>• Curriculum alignment with industry trends<br>• Strategic partnership & accreditation metric management |
+## Setup
 
----
+Use Node.js 22 or 24 LTS.
 
-## 🛠 Tech Stack & Architecture
+1. Run `npm ci`.
+2. Copy `.env.example` to `.env.local` and configure your project credentials. Never commit secrets.
+3. Back up the existing Supabase project and review then apply `supabase/migrations/202609210001_real_platform.sql` **once**, using Supabase SQL Editor or your authenticated migration tooling. It extends existing profiles, replaces profile policies with owner-scoped policies, creates the workflow schema and private bucket, and backfills profiles only for existing real Auth users. It does not insert demonstration data. Next apply `supabase/migrations/202609210002_industry_assessments.sql` once, in order. This adds industry-authored assessments, private question banks, and assessment-backed skill evidence. Do not rerun the first migration if it is already applied.
+4. In Supabase Auth, enable email authentication and allow your exact application callback URL (`http://localhost:3000/auth/callback` locally, your HTTPS URL in production). Configure Google OAuth only if using Google sign-in.
+5. Configure a verified Resend sender. Set `NEXT_PUBLIC_APP_URL` to your exact HTTPS deployment origin before production password recovery.
+6. Set a Gemini API key and a model available to your project for AI assessments. Without it, assessments show a configuration error; other features remain usable.
+7. Run `npm run dev` and open http://localhost:3000.
 
-- **Frontend & App Framework**: [Next.js 14](https://nextjs.org/) (App Router, Server & Client Components)
-- **UI & Styling**: [Tailwind CSS](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/) custom primitives, [Lucide React](https://lucide.dev/) icons
-- **Animations & Micro-interactions**: [Framer Motion](https://www.framer.com/motion/)
-- **Forms & Validation**: [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
-- **Authentication & Backend**: [Supabase](https://supabase.com/) (Auth, Row Level Security, PostgreSQL Database, SSR Client)
-- **AI & Automation**: [Google Generative AI (Gemini)](https://ai.google.dev/), [Inngest](https://www.inngest.com/) workflows
+The app keys alone cannot run SQL migrations. A connected Supabase management integration, SQL Editor access, or database migration credentials are required to apply the schema. Until the migration is applied, the new workspace and custom email rate-limiting endpoints are not ready for live use.
 
----
+## Industry assessments and readiness
 
-## 📂 Codebase Structure
+Industry accounts can author technical, aptitude, and scenario-based soft-skill MCQs in **Assessment Studio**, linked to an opportunity they own. Drafts and answer keys are private. Publishing records the author's approval and locks the version; a revised version keeps its own history. This is author approval, not independent organisation verification.
 
-```
-Origin-point/
-├── app/
-│   ├── (auth)/                     # Auth routes with dedicated layouts
-│   │   ├── login/                  # Email/password & Google OAuth sign in
-│   │   ├── signup/                 # Role-selection & progressive account registration
-│   │   ├── forgot-password/        # Password recovery request flow
-│   │   ├── reset-password/         # Secure token password update page
-│   │   ├── select-role/            # Role assignment selector
-│   │   └── onboarding/             # Guided post-signup onboarding
-│   ├── (dashboard)/                # Protected role workspaces
-│   │   ├── student/                # Student dashboard & assessments
-│   │   │   ├── assessment/         # Diagnostic tests, course modules, interactive learning
-│   │   │   └── report/             # Skill evaluation reports & feedback
-│   │   ├── industry/               # Recruiter talent discovery & candidate matching
-│   │   ├── academician/            # Faculty mentorship & research collaborations
-│   │   └── institution/            # Dean & department analytics
-│   ├── api/
-│   │   ├── assessment-questions/   # Dynamic AI assessment generation API
-│   │   └── webhooks/               # Inbound lifecycle & integration hooks
-│   ├── auth/callback/              # Supabase OAuth and email verification handler
-│   ├── layout.js                   # Root layout with theme provider and typography
-│   └── page.js                     # Origin Point hero landing page & value showcase
-├── components/
-│   ├── dashboard/                  # Reusable dashboard widgets & role overview components
-│   ├── shared/                     # Origin Point wordmarks, logos, and global brand elements
-│   └── ui/                         # shadcn/ui components (Button, Input, Card, Dialog, Tabs, etc.)
-├── lib/
-│   ├── supabase/                   # Supabase client, server, admin, and middleware utilities
-│   ├── ai/                         # Gemini AI prompt templates & runners
-│   ├── inngest/                    # Background event functions
-│   └── utils.js                    # Style merges (clsx + tailwind-merge)
-├── public/                         # Brand assets, static images, and icons
-└── middleware.js                   # Route protection and role-based redirect middleware
+Students use **Industry Assessments** for one scored attempt per published version. Start/resume returns no answer key. Submitted answers are scored server-side and saved atomically with per-competency evidence. Raw reports remain private to the student and approved institution; recruiters see evidence summaries only after portfolio-sharing consent through an application. No live demonstration users or questions are inserted.
+
+**Career Readiness** compares an opportunity's exact skill names against self-declared skills and the latest industry assessment evidence. It shows separate missing, self-declared, below-target, and assessment-backed states. Related learning programmes come from actual published opportunities. Qualification/availability eligibility rules, skill aliases, proficiency weights, and practical evaluations remain planned; no complete eligibility or employability score is claimed.
+
+Reports use each assessment's own target and show the latest result per competency rather than averaging incomparable employer and practice thresholds. MCQ scores include the question count; they are unproctored, not certificates. An unfinished attempt can be reopened but selected answers are not saved until submission. The list currently shows the latest 100 accessible assessments.
+
+## Access and privacy
+
+- Normal app operations use the signed-in user's Supabase session and row-level security. The service-role key stays server-side for email delivery, rate limits, and assessment scoring.
+- Assigned roles cannot be changed by editing a profile.
+- Directory entries omit account email. Student/faculty discoverability is opt-in; industry/institution professional directory entries are visible to signed-in members.
+- Applying shares the applicant's portfolio and attached documents with that opportunity owner. Institution approval shares member portfolio, documents, applications, and assessment progress with that institution.
+- Documents use 60-second signed links after permission checks. Issued links remain valid until expiry.
+- Applicants cannot edit recruiter decisions, self-verify credentials, or submit their own scores.
+- The match percentage is normalized exact skill-name overlap, not an employability score or an AI prediction.
+
+## Verification
+
+```sh
+npm test
+npm run typecheck
+npm run lint
+npm run build
 ```
 
----
+Database tests run the migration inside a disposable local PGlite database and exercise RLS, private files, role restrictions, applications, institution consent, assessment transactions, and rate limits. Synthetic identities exist only inside these isolated tests; tests never write to your connected Supabase project.
 
-## 🔐 Authentication & Security
+After applying the migration, verify the real journey with accounts you control: save a profile and credentials, publish an opportunity, apply from an eligible account, review the application, approve institution membership, and submit an assessment. Check persistence after sign-out/sign-in and from a second device.
 
-- **Session Management**: Supabase SSR (`@supabase/ssr`) with HTTP-only cookie session exchange.
-- **Role-Based Access Control**: Persistent user roles stored both in Supabase `profiles` table and encrypted session metadata.
-- **Route Guarding**: Next.js middleware automatically protects dashboard routes, ensuring unauthenticated requests redirect to `/login` with clean callback preservation.
-- **Recovery & Password Reset**: Secure tokenized password recovery via custom SMTP email configuration.
+## Integrations and remaining product work
 
----
+Resend is used for account emails, Gemini for AI practice questions, and Supabase for Auth, database, and files. External learning resources are links only; institutional ERP/LMS sync, certification-provider verification, institution/employer identity vetting, live chat, practical-task/human-review workflows, and independent credential verification are not implemented integrations. A `verified_at` field is not a verification service.
 
-## ⚙️ Environment Configuration
-
-Create a `.env.local` file in the root directory:
-
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-# Optional: Google Gemini AI (for assessment generation)
-GEMINI_API_KEY=your_gemini_api_key
-
-# Optional: Inngest
-INNGEST_EVENT_KEY=your_inngest_event_key
-INNGEST_SIGNING_KEY=your_inngest_signing_key
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Prerequisites
-- Node.js `18.17+` or `20+`
-- npm, yarn, or pnpm
-
-### 2. Installation
-```bash
-# Clone the repository
-git clone https://github.com/your-username/Origin-point.git
-cd Origin-point
-
-# Install dependencies
-npm install
-```
-
-### 3. Database Migration
-Ensure the `profiles` table exists in your Supabase database:
-```sql
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  email TEXT,
-  full_name TEXT,
-  role TEXT CHECK (role IN ('student', 'industry', 'academician', 'institution')),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view and update their own profile"
-  ON public.profiles FOR ALL
-  USING (auth.uid() = id);
-```
-
-### 4. Run Development Server
-```bash
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 🔄 Recent Updates & Fixes (Latest Changelog)
-
-1. **Form Input Ref-Forwarding Fix (`components/ui/input.jsx`)**:
-   - Replaced custom function wrapper with `React.forwardRef` around the native input element.
-   - Fixed the critical bug where React Hook Form was unable to register the DOM input elements, preventing `undefined` values that previously triggered `"Invalid input"` errors on Login, Sign Up, and Forgot Password.
-
-2. **Zod Validation Schema Hardening**:
-   - Streamlined Zod v4 validation chains in `login`, `signup`, and `forgot-password` pages.
-   - Shifted `.trim()` and `.toLowerCase()` operations into the submission handler to ensure smooth compatibility with `@hookform/resolvers/zod`.
-
-3. **Forgot Password Screen Polish**:
-   - Removed extraneous info cards (e.g., Google OAuth helper box) to create a focused, high-conversion recovery experience.
-   - Enhanced error message handling for rate-limiting and invalid address notifications.
-
-4. **Landing Page Cleanup**:
-   - Permanently removed the obsolete bottom navigation footer from `app/page.js` as requested.
-
----
-
-## 📄 License
-This project is open-source and available under the [MIT License](LICENSE).
+Before a public launch, add identity vetting, abuse protection/CAPTCHA, document malware scanning, retention/deletion processes, audit logging, monitoring, backups, load testing, and accessibility testing. Email rate limits currently apply per address, not globally. The workspace currently reads authorized records in batches; a large deployment needs server-filtered queries and paginated UI.

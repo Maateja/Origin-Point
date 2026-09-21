@@ -1,6 +1,7 @@
 import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
+import { AuthCacheBoundary } from "@/components/platform/auth-cache-boundary";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -66,7 +67,7 @@ export default function RootLayout({ children }) {
           defaultTheme="light"
           disableTransitionOnChange
         >
-          {children}
+          <AuthCacheBoundary>{children}</AuthCacheBoundary>
         </ThemeProvider>
       </body>
     </html>

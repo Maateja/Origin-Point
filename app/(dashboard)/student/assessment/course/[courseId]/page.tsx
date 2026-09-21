@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useState } from "react";
+import { usePlatformData } from "@/lib/platform-store";
+import { DataState } from "@/components/platform/primitives";
+import { useParams, notFound } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -18,230 +20,76 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { getCourseDetails, CourseModuleItem, SubTopic } from "@/lib/courses-data";
+import {
+  getCourseDetails,
+  CourseModuleItem,
+  SubTopic,
+} from "@/lib/courses-data";
 import { cn } from "@/lib/utils";
 
-// External learning resources generator per course with direct, topic-specific destinations
-function getCourseExternalResources(courseId: string, courseTitle: string) {
-  const map: Record<string, { referenceSites: Array<{ name: string; description: string; url: string }>; youtubeVideos: Array<{ title: string; channel: string; description: string; url: string }> }> = {
-    c1: {
-      referenceSites: [
-        {
-          name: "W3Schools Full-Stack",
-          description: "Hands-on tutorials for HTML, CSS, JavaScript, Node.js, and SQL.",
-          url: "https://www.w3schools.com/whatis/whatis_fullstack.asp",
-        },
-        {
-          name: "GeeksforGeeks Web Development",
-          description: "Comprehensive step-by-step roadmap from frontend UI to backend APIs and databases.",
-          url: "https://www.geeksforgeeks.org/web-development/",
-        },
-        {
-          name: "MDN Web Docs",
-          description: "Authoritative specifications, architecture standards, and practical developer guides.",
-          url: "https://developer.mozilla.org/en-US/docs/Learn",
-        },
-      ],
-      youtubeVideos: [
-        {
-          title: "Full Stack Web Development for Beginners (Full Course 2024)",
-          channel: "freeCodeCamp",
-          description: "End-to-end video tutorial walking through all full-stack layers from setup to production.",
-          url: "https://www.youtube.com/watch?v=nu_pCVPKzTk",
-        },
-        {
-          title: "Web Development in 2024 - A Practical Guide & Roadmap",
-          channel: "Traversy Media",
-          description: "Practical modern guide detailing frontend, backend, APIs, and modern toolchains.",
-          url: "https://www.youtube.com/watch?v=VfGW0Qiy2I0",
-        },
-        {
-          title: "Modern Web Architecture in 100 Seconds",
-          channel: "Fireship",
-          description: "Fast, visual breakdown of modern client-server models, SSR, and database flows.",
-          url: "https://www.youtube.com/watch?v=zJSY8tbf_ys",
-        },
-      ],
-    },
-    c2: {
-      referenceSites: [
-        {
-          name: "GeeksforGeeks DSA",
-          description: "Detailed algorithms, visual animations, and curated problem sets.",
-          url: "https://www.geeksforgeeks.org/data-structures/",
-        },
-        {
-          name: "W3Schools Data Structures",
-          description: "Interactive visual tutorials for arrays, linked lists, stacks, and trees.",
-          url: "https://www.w3schools.com/dsa/",
-        },
-        {
-          name: "MDN Algorithms & Data Structures",
-          description: "Standard algorithmic complexity, memory representation, and sorting patterns.",
-          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
-        },
-      ],
-      youtubeVideos: [
-        {
-          title: "Algorithms and Data Structures Tutorial - Full Course",
-          channel: "freeCodeCamp",
-          description: "Comprehensive course covering trees, graphs, sorting, and dynamic programming.",
-          url: "https://www.youtube.com/watch?v=8hly31xKli0",
-        },
-        {
-          title: "Data Structures and Algorithms in 15 Minutes",
-          channel: "Aaron Jack",
-          description: "Intuitive visual summary of Big-O complexity and essential structures.",
-          url: "https://www.youtube.com/watch?v=RBSGKlAvoiM",
-        },
-        {
-          title: "7 Algorithms Every Developer Must Know",
-          channel: "Fireship",
-          description: "High-yield review of critical algorithms tested in technical assessments.",
-          url: "https://www.youtube.com/watch?v=bum_19vj9Zg",
-        },
-      ],
-    },
-    c3: {
-      referenceSites: [
-        {
-          name: "W3Schools SQL Tutorial",
-          description: "Interactive SQL exercises, queries, joins, aggregates, and database schemas.",
-          url: "https://www.w3schools.com/sql/",
-        },
-        {
-          name: "GeeksforGeeks SQL & Relational DBMS",
-          description: "Database normalization, ACID transactions, indexing, and query optimization.",
-          url: "https://www.geeksforgeeks.org/sql-tutorial/",
-        },
-        {
-          name: "MDN Server-Side Persistence",
-          description: "Database modeling and integrating storage with web applications.",
-          url: "https://developer.mozilla.org/en-US/docs/Learn/Server-side/First_steps/Web_frameworks_databases",
-        },
-      ],
-      youtubeVideos: [
-        {
-          title: "SQL Tutorial - Full Database Course for Beginners",
-          channel: "freeCodeCamp",
-          description: "Relational database fundamentals, SQL queries, table joins, and schema management.",
-          url: "https://www.youtube.com/watch?v=HXV3zeQKqGY",
-        },
-        {
-          title: "SQL Explained in 100 Seconds",
-          channel: "Fireship",
-          description: "Fast-paced visual breakdown of SQL queries, relations, and table joins.",
-          url: "https://www.youtube.com/watch?v=7S_tz1z_5bA",
-        },
-      ],
-    },
-    c4: {
-      referenceSites: [
-        {
-          name: "GeeksforGeeks DevOps Tutorial",
-          description: "Comprehensive DevOps roadmap covering Docker, CI/CD pipelines, and cloud hosting.",
-          url: "https://www.geeksforgeeks.org/devops-tutorial/",
-        },
-        {
-          name: "W3Schools Cloud & AWS",
-          description: "Cloud computing concepts, compute instances, storage, and networking.",
-          url: "https://www.w3schools.com/aws/",
-        },
-        {
-          name: "MDN Deployment Guides",
-          description: "Production web server configuration, HTTPS, and performance tuning.",
-          url: "https://developer.mozilla.org/en-US/docs/Learn/Server-side/Deploying",
-        },
-      ],
-      youtubeVideos: [
-        {
-          title: "DevOps Engineering Course for Beginners",
-          channel: "freeCodeCamp",
-          description: "Hands-on cloud infrastructure, Docker containerization, and automated deployments.",
-          url: "https://www.youtube.com/watch?v=WvhQhkflhpo",
-        },
-        {
-          title: "Docker in 100 Seconds",
-          channel: "Fireship",
-          description: "Fast explanation of containers, Dockerfiles, and container orchestration.",
-          url: "https://www.youtube.com/watch?v=Xrgk023l4lI",
-        },
-      ],
-    },
-  };
-
-  const direct = map[courseId];
-  if (direct) return direct;
-
-  const query = encodeURIComponent(courseTitle);
+// Authored resource links; no imported enrollments or provider completion claims.
+function getCourseExternalResources(courseId: string) {
   return {
-    referenceSites: [
-      {
-        name: "GeeksforGeeks",
-        description: `Concept tutorials and practical examples for ${courseTitle}.`,
-        url: `https://www.geeksforgeeks.org/search/?q=${query}`,
-      },
-      {
-        name: "W3Schools",
-        description: `Interactive syntax references and hands-on examples for ${courseTitle}.`,
-        url: `https://www.w3schools.com/search/search_result.php?search=${query}`,
-      },
-      {
-        name: "MDN Web Docs",
-        description: `Official technical documentation and web engineering standards.`,
-        url: `https://developer.mozilla.org/en-US/search?q=${query}`,
-      },
-    ],
-    youtubeVideos: [
-      {
-        title: `${courseTitle} - Complete Tutorial for Beginners`,
-        channel: "freeCodeCamp",
-        description: `Comprehensive video tutorial covering foundational and practical concepts.`,
-        url: `https://www.youtube.com/results?search_query=${query}+full+course+tutorial`,
-      },
-      {
-        title: `${courseTitle} - Architecture & Best Practices`,
-        channel: "Traversy Media",
-        description: `Practical walkthroughs and real-world engineering patterns.`,
-        url: `https://www.youtube.com/results?search_query=${query}+practical+guide`,
-      },
-    ],
+    referenceSites:
+      courseId === "c1"
+        ? [
+            {
+              name: "MDN Learn Web Development",
+              description:
+                "HTML, CSS, JavaScript, accessibility, and web development fundamentals.",
+              url: "https://developer.mozilla.org/en-US/docs/Learn_web_development",
+            },
+          ]
+        : [
+            {
+              name: "MIT OpenCourseWare: Introduction to Algorithms",
+              description:
+                "Open course materials covering data structures, algorithm design, and analysis.",
+              url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+            },
+          ],
   };
 }
 
 export default function CourseDetailPage() {
   const params = useParams();
-  const courseId = typeof params?.courseId === "string" ? params.courseId : "c1";
+  const courseId =
+    typeof params?.courseId === "string" ? params.courseId : "c1";
 
   const course = getCourseDetails(courseId);
-  const resources = getCourseExternalResources(course.id, course.title);
 
   // Active expanded module accordion (default expands module 1)
   const [expandedModuleId, setExpandedModuleId] = useState<string>("m1");
 
-  // Dynamic completed modules tracking from localStorage (starts at 0/8)
-  const [completedModules, setCompletedModules] = useState<string[]>([]);
-
-  const isModuleCompleted = (modId: string) => {
-    return completedModules.includes(`${course.id}-${modId}`) || completedModules.includes(modId);
-  };
-  const completedCount = course.modules.filter((m) => isModuleCompleted(m.id)).length;
-  const progressPercent = Math.round((completedCount / course.totalModules) * 100);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("skillsync_completed_modules");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Clean out any assessment keys to keep course completions pure
-          setCompletedModules(parsed.filter((k) => typeof k === "string" && !k.startsWith("assessment-")));
-        }
-      }
-    } catch (e) {
-      console.warn("Could not read completed modules from localStorage:", e);
-    }
-  }, []);
+  const state = usePlatformData();
+  if (!course) notFound();
+  const resources = getCourseExternalResources(course.id);
+  const progress =
+    state.data?.progress.filter((p) => p.user_id === state.data?.profile.id) ??
+    [];
+  const isModuleCompleted = (modId: string) =>
+    course.modules
+      .find((m) => m.id === modId)
+      ?.subTopics.every((s) =>
+        progress.some(
+          (p) =>
+            p.course_id === course.id &&
+            p.module_id === modId &&
+            p.subtopic_id === s.id,
+        ),
+      ) ?? false;
+  const completedCount = course.modules.filter((m) =>
+    isModuleCompleted(m.id),
+  ).length;
+  const progressPercent = Math.round(
+    (completedCount / course.totalModules) * 100,
+  );
+  if (state.loading || state.error)
+    return (
+      <DashboardShell role="student" title="Course">
+        <DataState {...state} retry={state.refresh} />
+      </DashboardShell>
+    );
 
   // Divide modules into 4 distinct levels (2 modules per level)
   const levelGroups = [
@@ -249,29 +97,45 @@ export default function CourseDetailPage() {
       id: "very-beginner",
       title: "Very Beginner",
       levelNumber: "Level 1",
-      description: "2 Essential modules covering foundational building blocks and core syntax",
-      modules: course.modules.filter((m) => m.level === "very-beginner" || m.moduleNumber <= 2),
+      description:
+        "Foundational concepts and terminology",
+      modules: course.modules.filter(
+        (m) => m.level === "very-beginner" || m.moduleNumber <= 2,
+      ),
     },
     {
       id: "beginner",
       title: "Beginner",
       levelNumber: "Level 2",
-      description: "2 Modules covering component composition, state flow, and API integration",
-      modules: course.modules.filter((m) => m.level === "beginner" || (m.moduleNumber >= 3 && m.moduleNumber <= 4)),
+      description:
+        "Core techniques and guided practice",
+      modules: course.modules.filter(
+        (m) =>
+          m.level === "beginner" ||
+          (m.moduleNumber >= 3 && m.moduleNumber <= 4),
+      ),
     },
     {
       id: "intermediate",
       title: "Intermediate",
       levelNumber: "Level 3",
-      description: "2 Modules covering advanced patterns, routing, and backend engineering",
-      modules: course.modules.filter((m) => m.level === "intermediate" || (m.moduleNumber >= 5 && m.moduleNumber <= 6)),
+      description:
+        "Intermediate concepts and applied problem solving",
+      modules: course.modules.filter(
+        (m) =>
+          m.level === "intermediate" ||
+          (m.moduleNumber >= 5 && m.moduleNumber <= 6),
+      ),
     },
     {
       id: "advanced",
       title: "Advanced",
       levelNumber: "Level 4",
-      description: "2 Modules covering auth, deployment, CI/CD, and production scale",
-      modules: course.modules.filter((m) => m.level === "advanced" || m.moduleNumber >= 7),
+      description:
+        "Advanced topics and deeper practice",
+      modules: course.modules.filter(
+        (m) => m.level === "advanced" || m.moduleNumber >= 7,
+      ),
     },
   ];
 
@@ -304,10 +168,12 @@ export default function CourseDetailPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 pb-6 border-b border-border/60">
             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5 font-medium">
-                <BookOpen className="h-4 w-4 text-primary" /> {course.totalModules} Comprehensive Modules
+                <BookOpen className="h-4 w-4 text-primary" />{" "}
+                {course.totalModules} Comprehensive Modules
               </span>
               <span className="inline-flex items-center gap-1.5 font-medium">
-                <Award className="h-4 w-4 text-emerald-500" /> Verified Skill Badges
+                <Award className="h-4 w-4 text-emerald-500" /> Practice Track
+                Badges
               </span>
             </div>
 
@@ -318,7 +184,9 @@ export default function CourseDetailPage() {
                   <span className="font-medium text-foreground">
                     {completedCount} of {course.totalModules} completed
                   </span>
-                  <span className="font-bold text-primary">{progressPercent}%</span>
+                  <span className="font-bold text-primary">
+                    {progressPercent}%
+                  </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                   <div
@@ -362,12 +230,14 @@ export default function CourseDetailPage() {
                         "rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs",
                         completed
                           ? "border-emerald-500/30 bg-card hover:border-emerald-500/50"
-                          : "border-border/80 bg-card hover:border-primary/40"
+                          : "border-border/80 bg-card hover:border-primary/40",
                       )}
                     >
                       {/* Module Header */}
                       <div
-                        onClick={() => setExpandedModuleId(isExpanded ? "" : mod.id)}
+                        onClick={() =>
+                          setExpandedModuleId(isExpanded ? "" : mod.id)
+                        }
                         className="p-5 flex items-center justify-between gap-5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                       >
                         <div className="flex items-center gap-4 min-w-0">
@@ -377,13 +247,15 @@ export default function CourseDetailPage() {
                               "h-10 w-10 rounded-2xl flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs",
                               completed
                                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                : "bg-muted text-muted-foreground"
+                                : "bg-muted text-muted-foreground",
                             )}
                           >
                             {completed ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : mod.moduleNumber < 10 ? (
+                              `0${mod.moduleNumber}`
                             ) : (
-                              mod.moduleNumber < 10 ? `0${mod.moduleNumber}` : `${mod.moduleNumber}`
+                              `${mod.moduleNumber}`
                             )}
                           </div>
 
@@ -491,7 +363,8 @@ export default function CourseDetailPage() {
               </h2>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              Direct curated study material from GeeksforGeeks, W3Schools, MDN, and verified video guides for {course.title}.
+              Open study materials for {course.title}. These are external
+              resources, not integrated certification providers.
             </p>
           </div>
 
@@ -521,37 +394,6 @@ export default function CourseDetailPage() {
                 </div>
               </a>
             ))}
-          </div>
-
-          {/* YouTube Video Tutorial Links (Direct topic-specific video links) */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Curated Video Tutorials
-            </h3>
-            <div className="divide-y divide-border/60 rounded-2xl border border-border/80 bg-card overflow-hidden">
-              {resources.youtubeVideos.map((video, idx) => (
-                <a
-                  key={idx}
-                  href={video.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-4 flex items-center justify-between gap-4 text-xs hover:bg-muted/40 transition-colors group"
-                >
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                      {video.title}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      <span className="font-medium text-foreground/80">{video.channel}</span> &bull; {video.description}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-muted-foreground group-hover:text-primary font-semibold text-xs flex-shrink-0">
-                    <span>Watch Tutorial</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </div>
-                </a>
-              ))}
-            </div>
           </div>
         </div>
       </div>

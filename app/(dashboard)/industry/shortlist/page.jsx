@@ -1,5 +1,5 @@
-import { WorkspacePage } from "@/components/dashboard/workspace-page";
+import { ShortlistBoard } from "@/components/industry/shortlist-board";
 
 export default function IndustryShortlistPage() {
-  return <WorkspacePage role="industry" pageKey="industry/shortlist" />;
+  return <ShortlistBoard />;
 }

@@ -49,36 +49,68 @@ const roleLabels: Record<string, string> = {
   institution: "Institution",
 };
 
-const roleNavigation: Record<string, NavItem[]> = {
+export const roleNavigation: Record<string, NavItem[]> = {
   student: [
-    { label: "Dashboard",        href: "/student",                icon: LayoutDashboard },
-    { label: "Skill Assessment", href: "/student/assessment",     icon: ClipboardCheck },
-    { label: "Skill Report",     href: "/student/report",         icon: BarChart3 },
-    { label: "Portfolio",        href: "/student/portfolio",      icon: FileText },
-    { label: "Marketplace",      href: "/student/marketplace",    icon: Briefcase },
-    { label: "Applications",     href: "/student/applications",   icon: Target },
+    { label: "Dashboard", href: "/student", icon: LayoutDashboard },
+    {
+      label: "Skill Assessment",
+      href: "/student/assessment",
+      icon: ClipboardCheck,
+    },
+    {
+      label: "Industry Assessments",
+      href: "/student/industry-assessments",
+      icon: ClipboardCheck,
+    },
+    { label: "Career Readiness", href: "/student/readiness", icon: Target },
+    { label: "Skill Report", href: "/student/report", icon: BarChart3 },
+    { label: "Portfolio", href: "/student/portfolio", icon: FileText },
+    { label: "Marketplace", href: "/student/marketplace", icon: Briefcase },
+    { label: "Applications", href: "/student/applications", icon: Target },
   ],
   industry: [
-    { label: "Dashboard",         href: "/industry",            icon: LayoutDashboard },
-    { label: "Post Opportunity",  href: "/industry/post",       icon: Briefcase },
-    { label: "Candidates",        href: "/industry/candidates", icon: Users },
-    { label: "Shortlisted",       href: "/industry/shortlist",  icon: FolderKanban },
-    { label: "Programs",          href: "/industry/programs",   icon: BookMarked },
+    { label: "Dashboard", href: "/industry", icon: LayoutDashboard },
+    {
+      label: "Assessment Studio",
+      href: "/industry/assessments",
+      icon: ClipboardCheck,
+    },
+    { label: "Post Opportunity", href: "/industry/post", icon: Briefcase },
+    { label: "Candidates", href: "/industry/candidates", icon: Users },
+    { label: "Shortlisted", href: "/industry/shortlist", icon: FolderKanban },
+    { label: "Programs", href: "/industry/programs", icon: BookMarked },
   ],
   academician: [
-    { label: "Dashboard",   href: "/academician",             icon: LayoutDashboard },
-    { label: "FDPs",        href: "/academician/fdps",        icon: BookMarked },
+    { label: "Dashboard", href: "/academician", icon: LayoutDashboard },
+    { label: "FDPs", href: "/academician/fdps", icon: BookMarked },
     { label: "Consultancy", href: "/academician/consultancy", icon: Handshake },
-    { label: "Research",    href: "/academician/research",    icon: FlaskConical },
+    { label: "Research", href: "/academician/research", icon: FlaskConical },
     { label: "Internships", href: "/academician/internships", icon: Briefcase },
+    {
+      label: "My Applications",
+      href: "/academician/applications",
+      icon: Target,
+    },
+    {
+      label: "Publish Collaboration",
+      href: "/academician/publish",
+      icon: Handshake,
+    },
+    { label: "Applicants", href: "/academician/candidates", icon: Users },
   ],
   institution: [
-    { label: "Dashboard",       href: "/institution",              icon: LayoutDashboard },
-    { label: "Skill Analytics", href: "/institution/skills",       icon: BarChart3 },
-    { label: "Placement",       href: "/institution/placement",    icon: TrendingUp },
-    { label: "Recruitment",     href: "/institution/recruitment",  icon: PieChart },
-    { label: "Students",        href: "/institution/students",     icon: UserCheck },
-    { label: "Departments",     href: "/institution/departments",  icon: Building },
+    { label: "Dashboard", href: "/institution", icon: LayoutDashboard },
+    { label: "Skill Analytics", href: "/institution/skills", icon: BarChart3 },
+    { label: "Placement", href: "/institution/placement", icon: TrendingUp },
+    { label: "Recruitment", href: "/institution/recruitment", icon: PieChart },
+    { label: "Students", href: "/institution/students", icon: UserCheck },
+    { label: "Departments", href: "/institution/departments", icon: Building },
+    {
+      label: "Publish Collaboration",
+      href: "/institution/publish",
+      icon: Handshake,
+    },
+    { label: "Applicants", href: "/institution/candidates", icon: Users },
   ],
 };
 
@@ -88,14 +120,21 @@ interface SidebarProps {
 
 export function Sidebar({ role = "student" }: SidebarProps) {
   const pathname = usePathname();
-  const navItems = roleNavigation[role] ?? roleNavigation.student;
+  const navItems = [
+    ...(roleNavigation[role] ?? roleNavigation.student),
+    {
+      label: "Profile & credentials",
+      href: `/${role}/profile`,
+      icon: Settings,
+    },
+  ];
   const RoleIcon = roleIcons[role] ?? GraduationCap;
   const roleLabel = roleLabels[role] ?? "Student";
 
   return (
     <aside
       className={cn(
-        "dashboard-sidebar fixed bottom-0 left-0 top-0 z-50 w-64 flex-col border-r border-border bg-card"
+        "dashboard-sidebar fixed bottom-0 left-0 top-0 z-50 w-64 flex-col border-r border-border bg-card",
       )}
     >
       {/* Logo / Brand */}
@@ -140,7 +179,7 @@ export function Sidebar({ role = "student" }: SidebarProps) {
                   "group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors duration-150",
                   isActive
                     ? "role-bg-soft role-text"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 )}
               >
                 {isActive && (
@@ -154,7 +193,9 @@ export function Sidebar({ role = "student" }: SidebarProps) {
                 <Icon
                   className={cn(
                     "h-4 w-4 flex-shrink-0 transition-colors",
-                    isActive ? "role-text" : "text-muted-foreground group-hover:text-foreground"
+                    isActive
+                      ? "role-text"
+                      : "text-muted-foreground group-hover:text-foreground",
                   )}
                 />
                 <span className="whitespace-nowrap">{item.label}</span>
@@ -163,7 +204,6 @@ export function Sidebar({ role = "student" }: SidebarProps) {
           );
         })}
       </nav>
-
     </aside>
   );
 }

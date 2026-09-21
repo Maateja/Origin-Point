@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { usePlatformData } from "@/lib/platform-store";
+import { DataState } from "@/components/platform/primitives";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -13,7 +15,13 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
@@ -63,56 +71,27 @@ export default function AssessmentDetailPage() {
   const router = useRouter();
   const reportId = typeof params?.reportId === "string" ? params.reportId : "";
 
-  const [report, setReport] = useState<AssessmentReport | null>(null);
+  const state = usePlatformData();
+  const report =
+    state.data?.reports.find(
+      (r) => r.id === reportId && r.userId === state.data?.profile.id,
+    ) ?? null;
   const [filter, setFilter] = useState<"all" | "correct" | "incorrect">("all");
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    try {
-      const allSavedRaw = localStorage.getItem("skillsync_all_assessment_reports");
-      const latestSavedRaw = localStorage.getItem("skillsync_latest_assessment_report");
-
-      let foundReport: AssessmentReport | null = null;
-
-      if (allSavedRaw) {
-        const parsed: AssessmentReport[] = JSON.parse(allSavedRaw);
-        if (Array.isArray(parsed)) {
-          foundReport =
-            parsed.find(
-              (r) =>
-                r.id === reportId ||
-                r.id.toLowerCase().includes(reportId.toLowerCase()) ||
-                reportId.toLowerCase().includes(r.id.toLowerCase())
-            ) || null;
-        }
-      }
-
-      if (!foundReport && latestSavedRaw) {
-        const parsed: AssessmentReport = JSON.parse(latestSavedRaw);
-        if (
-          parsed &&
-          (parsed.id === reportId ||
-            parsed.topicTitle?.toLowerCase().replace(/\s+/g, "-") === reportId.toLowerCase() ||
-            !allSavedRaw)
-        ) {
-          foundReport = parsed;
-        }
-      }
-
-      setReport(foundReport);
-    } catch (e) {
-      console.warn("Could not load report from localStorage:", e);
-    } finally {
-      setIsLoaded(true);
-    }
-  }, [reportId]);
+  const isLoaded = !!state.data;
+  if (state.loading || state.error)
+    return (
+      <DashboardShell role="student" title="Skill Report">
+        <DataState {...state} retry={state.refresh} />
+      </DashboardShell>
+    );
 
   if (isLoaded && !report) {
     return (
       <DashboardShell role="student" title="Report Not Found">
         <div className="min-h-[50vh] flex flex-col items-center justify-center text-center space-y-4 max-w-md mx-auto">
           <p className="text-muted-foreground text-sm">
-            Assessment report not found. Complete an assessment to generate your report.
+            Assessment report not found. Complete an assessment to generate your
+            report.
           </p>
           <Link href="/student/report">
             <Button variant="outline" className="rounded-2xl text-xs gap-1.5">
@@ -147,6 +126,17 @@ export default function AssessmentDetailPage() {
 
   return (
     <DashboardShell role="student" title={`${report.topicTitle} Report`}>
+      <div className="mb-5 rounded-2xl border border-border bg-card p-4 text-sm">
+        <p className="font-semibold">
+          {report.assessmentKind === "industry"
+            ? "Industry-authored assessment"
+            : "AI-generated practice assessment"}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {report.source || "Practice assessment"} · Target:{" "}
+          {report.targetPercent ?? 70}% · Not an accredited certification
+        </p>
+      </div>
       <div className="space-y-8 max-w-5xl mx-auto pb-16">
         {/* Back navigation */}
         <div>
@@ -169,7 +159,7 @@ export default function AssessmentDetailPage() {
               {report.topicTitle}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Completed on {report.date}
+              Completed on {new Date(report.date).toLocaleDateString("en-IN")}
             </p>
           </div>
 
@@ -208,7 +198,7 @@ export default function AssessmentDetailPage() {
                     "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all",
                     filter === "all"
                       ? "bg-background text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   All ({evaluatedQuestions.length})
@@ -220,7 +210,7 @@ export default function AssessmentDetailPage() {
                     "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all",
                     filter === "correct"
                       ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Correct ({report.correctCount})
@@ -232,7 +222,7 @@ export default function AssessmentDetailPage() {
                     "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all",
                     filter === "incorrect"
                       ? "bg-background text-destructive shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Wrong ({report.totalCount - report.correctCount})
@@ -249,7 +239,7 @@ export default function AssessmentDetailPage() {
                     "p-5 sm:p-6 rounded-3xl border bg-card transition-all duration-200 shadow-xs space-y-4",
                     q.isCorrect
                       ? "border-emerald-500/30 hover:border-emerald-500/50"
-                      : "border-destructive/30 hover:border-destructive/50"
+                      : "border-destructive/30 hover:border-destructive/50",
                   )}
                 >
                   {/* Top: Status & Skill Area */}
@@ -259,7 +249,10 @@ export default function AssessmentDetailPage() {
                         Question {q.id}
                       </span>
                       {q.skillArea && (
-                        <Badge variant="outline" className="text-[0.65rem] rounded-full px-2.5">
+                        <Badge
+                          variant="outline"
+                          className="text-[0.65rem] rounded-full px-2.5"
+                        >
                           {q.skillArea}
                         </Badge>
                       )}
@@ -294,13 +287,16 @@ export default function AssessmentDetailPage() {
                           const isUserChoice = q.chosenAnswer === optIdx;
                           const isCorrectOpt = q.correctAnswer === optIdx;
 
-                          let badgeStyle = "border-border/70 bg-muted/20 text-muted-foreground";
+                          let badgeStyle =
+                            "border-border/70 bg-muted/20 text-muted-foreground";
                           let label = "";
 
                           if (isCorrectOpt) {
                             badgeStyle =
                               "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold";
-                            label = isUserChoice ? "Your Answer (Correct)" : "Correct Answer";
+                            label = isUserChoice
+                              ? "Your Answer (Correct)"
+                              : "Correct Answer";
                           } else if (isUserChoice) {
                             badgeStyle =
                               "border-destructive/40 bg-destructive/10 text-destructive font-semibold";
@@ -312,7 +308,7 @@ export default function AssessmentDetailPage() {
                               key={optIdx}
                               className={cn(
                                 "p-3 rounded-2xl border text-xs flex items-center justify-between gap-2",
-                                badgeStyle
+                                badgeStyle,
                               )}
                             >
                               <span className="leading-snug">{opt}</span>
@@ -354,7 +350,8 @@ export default function AssessmentDetailPage() {
                 Skill Breakdown &bull; {report.topicTitle}
               </CardTitle>
               <CardDescription className="text-xs">
-                Performance breakdown vs. industry benchmark in {report.topicTitle}
+                Competency performance against this assessment’s target in{" "}
+                {report.topicTitle}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 sm:p-7 pt-4 space-y-6">
@@ -362,13 +359,21 @@ export default function AssessmentDetailPage() {
                 <div key={s.skill} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{s.skill}</span>
-                      {s.trend === "up" && <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
-                      {s.trend === "down" && <TrendingDown className="h-3.5 w-3.5 text-destructive" />}
-                      {s.trend === "neutral" && <Minus className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span className="text-sm font-semibold text-foreground">
+                        {s.skill}
+                      </span>
+                      {s.trend === "up" && (
+                        <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                      )}
+                      {s.trend === "down" && (
+                        <TrendingDown className="h-3.5 w-3.5 text-destructive" />
+                      )}
+                      {s.trend === "neutral" && (
+                        <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>Benchmark: {s.benchmark}%</span>
+                      <span>Assessment target: {s.benchmark}%</span>
                       <span className="font-display font-extrabold text-foreground text-sm">
                         {s.score}%
                       </span>
@@ -385,7 +390,9 @@ export default function AssessmentDetailPage() {
                       transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
                       className={cn(
                         "h-full rounded-full",
-                        s.score >= s.benchmark ? "bg-emerald-500" : "bg-primary"
+                        s.score >= s.benchmark
+                          ? "bg-emerald-500"
+                          : "bg-primary",
                       )}
                     />
                   </div>
@@ -403,7 +410,8 @@ export default function AssessmentDetailPage() {
                 Skill Gap Recommendations &bull; {report.topicTitle}
               </CardTitle>
               <CardDescription className="text-xs">
-                Targeted recommendations based on incorrect answers in this assessment
+                Targeted recommendations based on incorrect answers in this
+                assessment
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 sm:p-7 pt-4 space-y-3.5">
@@ -414,20 +422,24 @@ export default function AssessmentDetailPage() {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-foreground">{rec.gap}</p>
+                      <p className="text-sm font-bold text-foreground">
+                        {rec.gap}
+                      </p>
                       <Badge
                         variant="secondary"
                         className={cn(
                           "text-[0.62rem] rounded-full px-2 py-0 font-semibold",
                           rec.priority === "High"
                             ? "bg-red-500/10 text-red-600 border border-red-500/20"
-                            : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                            : "bg-amber-500/10 text-amber-600 border border-amber-500/20",
                         )}
                       >
                         {rec.priority} Priority
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">{rec.resource}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {rec.resource}
+                    </p>
                   </div>
                 </div>
               ))}

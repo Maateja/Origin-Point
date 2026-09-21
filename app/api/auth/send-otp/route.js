@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { allowAuthEmail } from "@/lib/auth-rate-limit";
+import { z } from "zod";
 
 const ROLE_LABELS = {
   student: "Student",
@@ -9,17 +11,34 @@ const ROLE_LABELS = {
 };
 
 const ROLE_COLORS = {
-  student:     { bg: "#eef2ff", accent: "#6366f1", label: "#4338ca" },
-  industry:    { bg: "#fffbeb", accent: "#f59e0b", label: "#b45309" },
+  student: { bg: "#eef2ff", accent: "#6366f1", label: "#4338ca" },
+  industry: { bg: "#fffbeb", accent: "#f59e0b", label: "#b45309" },
   academician: { bg: "#ecfdf5", accent: "#10b981", label: "#047857" },
   institution: { bg: "#eff6ff", accent: "#3b82f6", label: "#1d4ed8" },
 };
 
 function buildEmailHtml({ name, role, otp, mode }) {
   const roleLabel = ROLE_LABELS[role] || null;
-  const colors = ROLE_COLORS[role] || { bg: "#f5f5ff", accent: "#6366f1", label: "#4338ca" };
+  const colors = ROLE_COLORS[role] || {
+    bg: "#f5f5ff",
+    accent: "#6366f1",
+    label: "#4338ca",
+  };
+  const safeName = (name || "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+  name = safeName;
   const greeting = name ? `Hi ${name},` : "Hi there,";
-  const action = mode === "signup" ? "create your account" : "sign in";
+  const action =
+    mode === "signup"
+      ? "create your account"
+      : mode === "recovery"
+        ? "reset your password"
+        : "sign in";
 
   const roleBadge = roleLabel
     ? `<div style="display:inline-block;margin:0 0 20px 0;padding:6px 14px;background:${colors.bg};border:1px solid ${colors.accent}40;border-radius:100px;">
@@ -57,7 +76,7 @@ function buildEmailHtml({ name, role, otp, mode }) {
               </p>
               <p style="margin:0 0 24px 0;font-size:15px;color:#6b7280;line-height:1.6;">
                 Here's your one-time code to ${action} on Origin Point.
-                It expires in <strong style="color:#374151;">5 minutes</strong>.
+                Use the latest code; older codes may expire.
               </p>
 
               <!-- Role badge -->
@@ -94,7 +113,7 @@ function buildEmailHtml({ name, role, otp, mode }) {
           <tr>
             <td align="center" style="padding:24px 0 0 0;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">
-                © 2025 Origin Point · All rights reserved
+                © Origin Point · All rights reserved
               </p>
               <p style="margin:4px 0 0 0;font-size:12px;color:#d1d5db;">
                 Sent to ${name ? `<strong style="color:#6b7280;">${name}</strong>` : "you"} for Origin Point verification
@@ -113,28 +132,54 @@ function buildEmailHtml({ name, role, otp, mode }) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { email, name, role, mode = "login" } = body;
+    const input = z
+      .object({
+        email: z.string().email().max(254),
+        name: z.string().max(160).optional(),
+        role: z
+          .enum(["student", "industry", "academician", "institution"])
+          .optional(),
+        mode: z.enum(["signup", "login", "recovery"]).default("login"),
+      })
+      .safeParse(body);
+    if (!input.success)
+      return NextResponse.json(
+        { error: "Enter valid account details." },
+        { status: 400 },
+      );
+    const { email, name, role, mode } = input.data;
 
     if (!email) {
-      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Email is required." },
+        { status: 400 },
+      );
     }
 
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
-    if (!RESEND_API_KEY) {
+    if (!RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
       return NextResponse.json(
-        { error: "Email service not configured. Please set RESEND_API_KEY." },
-        { status: 500 }
+        {
+          error:
+            "Email service is not configured. Contact the project administrator.",
+        },
+        { status: 500 },
       );
     }
 
     const admin = createAdminClient();
     const normalizedEmail = email.trim().toLowerCase();
+    if (!(await allowAuthEmail(admin, normalizedEmail)))
+      return NextResponse.json(
+        { error: "Too many email requests. Please try again in an hour." },
+        { status: 429 },
+      );
 
     let displayName = name?.trim() || null;
     let displayRole = role || null;
 
-    // For login: look up existing user's profile to get their name and role
-    if (mode === "login") {
+    // For login and recovery: look up existing user's profile to get their name and role
+    if (mode === "login" || mode === "recovery") {
       const { data: profile } = await admin
         .from("profiles")
         .select("full_name, role")
@@ -144,7 +189,7 @@ export async function POST(request) {
       if (!profile) {
         return NextResponse.json(
           { error: "No account found for this email. Please sign up first." },
-          { status: 404 }
+          { status: 404 },
         );
       }
 
@@ -152,23 +197,25 @@ export async function POST(request) {
       displayRole = profile.role || null;
     }
 
-    // Generate OTP via Supabase admin (does NOT send an email — we do that ourselves)
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email: normalizedEmail,
-      options: {
-        data: {
-          full_name: displayName,
-          role: displayRole,
+    // Generate OTP via Supabase admin
+    const linkType = mode === "recovery" ? "recovery" : "magiclink";
+    const { data: linkData, error: linkError } =
+      await admin.auth.admin.generateLink({
+        type: linkType,
+        email: normalizedEmail,
+        options: {
+          data: {
+            full_name: displayName,
+            role: displayRole,
+          },
         },
-      },
-    });
+      });
 
     if (linkError) {
       console.error("Supabase generateLink error:", linkError);
       return NextResponse.json(
         { error: linkError.message || "Failed to generate verification code." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -176,7 +223,7 @@ export async function POST(request) {
     if (!otpCode) {
       return NextResponse.json(
         { error: "Failed to generate OTP code. Please try again." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -188,7 +235,11 @@ export async function POST(request) {
       mode,
     });
 
-    const fromAddress = process.env.RESEND_FROM_EMAIL || "noreply@rajeswar.me";
+    const fromAddress = process.env.RESEND_FROM_EMAIL;
+    const emailSubject =
+      mode === "recovery"
+        ? `${otpCode} – Your Origin Point password reset code`
+        : `${otpCode} – Your Origin Point verification code`;
 
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -199,7 +250,7 @@ export async function POST(request) {
       body: JSON.stringify({
         from: `Origin Point <${fromAddress}>`,
         to: normalizedEmail,
-        subject: `${otpCode} – Your Origin Point verification code`,
+        subject: emailSubject,
         html: emailHtml,
       }),
     });
@@ -209,7 +260,7 @@ export async function POST(request) {
       console.error("Resend error:", resendError);
       return NextResponse.json(
         { error: resendError?.message || "Failed to send verification email." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -218,7 +269,7 @@ export async function POST(request) {
     console.error("send-otp route error:", err);
     return NextResponse.json(
       { error: err.message || "An unexpected error occurred." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

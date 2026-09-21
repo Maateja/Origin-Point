@@ -1,5 +1,5 @@
-import { WorkspacePage } from "@/components/dashboard/workspace-page";
+import { OpportunityPublisher } from "@/components/industry/opportunity-publisher";
 
 export default function IndustryPostPage() {
-  return <WorkspacePage role="industry" pageKey="industry/post" />;
+  return <OpportunityPublisher />;
 }

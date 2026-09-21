@@ -108,14 +108,14 @@ async function handleAuthSuccess({ supabase, user, origin, mode, queryRole, next
       : queryRole || "student";
 
   const userFullName =
+    existingProfile?.full_name ||
     user.user_metadata?.full_name ||
     user.user_metadata?.name ||
-    existingProfile?.full_name ||
     user.email?.split("@")[0] ||
     "User";
 
   // Upsert base profile
-  await supabase.from("profiles").upsert(
+  const {error: profileError} = await supabase.from("profiles").upsert(
     {
       id: user.id,
       email: user.email,
@@ -130,7 +130,9 @@ async function handleAuthSuccess({ supabase, user, origin, mode, queryRole, next
     { onConflict: "id" }
   );
 
-  if (nextParam && !nextParam.startsWith(`/${assignedRole}`)) {
+  if(profileError) return NextResponse.redirect(`${origin}/select-role?error=Profile%20could%20not%20be%20saved`);
+
+  if (nextParam && (nextParam === `/${assignedRole}` || nextParam.startsWith(`/${assignedRole}/`))) {
     return NextResponse.redirect(`${origin}${nextParam}`);
   }
 

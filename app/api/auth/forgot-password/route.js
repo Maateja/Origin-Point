@@ -1,85 +1,74 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
+import { allowAuthEmail } from "@/lib/auth-rate-limit";
+import { z } from "zod";
 export async function POST(request) {
-  try {
-    const body = await request.json();
-    const { email } = body;
-
-    if (!email) {
-      return NextResponse.json(
-        { error: "Email address is required." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    const admin = createAdminClient();
-
-    // Check if user exists
-    const { data: userList, error: listError } = await admin.auth.admin.listUsers();
-    if (listError) {
-      return NextResponse.json(
-        { error: listError.message || "Failed to search user directory." },
-        { status: 500 }
-      );
-    }
-
-    const user = userList?.users?.find(
-      (u) => u.email?.toLowerCase() === normalizedEmail
-    );
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            "No account found with this email address. Please make sure the email is typed correctly or create a new account.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Generate recovery link using admin client (bypasses broken SMTP mailer)
-    const host =
-      request.headers.get("x-forwarded-host") ||
-      request.headers.get("host") ||
-      "localhost:3000";
-    const protocol = request.headers.get("x-forwarded-proto") || "http";
-    const redirectUrl = `${protocol}://${host}/auth/callback?next=/reset-password`;
-
-    const { data: linkData, error: linkError } =
-      await admin.auth.admin.generateLink({
-        type: "recovery",
-        email: normalizedEmail,
-        options: {
-          redirectTo: redirectUrl,
-        },
-      });
-
-    if (linkError) {
-      return NextResponse.json(
-        { error: linkError.message || "Failed to generate recovery link." },
-        { status: 500 }
-      );
-    }
-
-    const actionLink = linkData?.properties?.action_link;
-    const isGoogle = user.app_metadata?.provider === "google";
-
-    return NextResponse.json({
-      success: true,
-      email: normalizedEmail,
-      actionLink: actionLink,
-      isGoogle: isGoogle,
-      message: isGoogle
-        ? "This account was originally registered with Google. You can use the link below to create an email password."
-        : "Password reset link generated successfully.",
-    });
-  } catch (err) {
-    console.error("Forgot password route error:", err);
+  const parsed = z
+    .object({ email: z.string().email().max(254) })
+    .safeParse(await request.json().catch(() => null));
+  if (!parsed.success)
     return NextResponse.json(
-      { error: err.message || "An unexpected error occurred." },
-      { status: 500 }
+      { error: "Enter a valid email address." },
+      { status: 400 },
+    );
+  const email = parsed.data.email.trim().toLowerCase();
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV === "development" ? "http://localhost:3000" : null);
+  if (!origin || !process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL)
+    return NextResponse.json(
+      {
+        error:
+          "Password recovery email is not configured. Contact the administrator.",
+      },
+      { status: 503 },
+    );
+  try {
+    const admin = createAdminClient();
+    if (!(await allowAuthEmail(admin, email)))
+      return NextResponse.json(
+        { error: "Too many email requests. Please try again in an hour." },
+        { status: 429 },
+      );
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    const message =
+      "If an account exists for that email, a recovery link has been sent.";
+    if (!profile) return NextResponse.json({ success: true, message });
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email,
+    });
+    if (error || !data?.properties?.hashed_token)
+      throw new Error("Could not generate recovery token");
+    const url = new URL("/auth/callback", origin);
+    url.searchParams.set("token_hash", data.properties.hashed_token);
+    url.searchParams.set("type", "recovery");
+    const sent = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + process.env.RESEND_API_KEY,
+      },
+      body: JSON.stringify({
+        from: "Origin Point <" + process.env.RESEND_FROM_EMAIL + ">",
+        to: email,
+        subject: "Reset your Origin Point password",
+        text:
+          "Open this secure link to reset your password: " +
+          url.toString() +
+          "\n\nIf you did not request this, you can ignore this email.",
+      }),
+    });
+    if (!sent.ok) throw new Error("Email delivery failed");
+    return NextResponse.json({ success: true, message });
+  } catch {
+    return NextResponse.json(
+      { error: "Recovery email could not be sent. Please try again later." },
+      { status: 503 },
     );
   }
 }

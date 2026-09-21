@@ -1,346 +1,563 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import useSWR, { mutate } from "swr";
+import { useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 
-export type OpportunityType = "Internship" | "Job" | "Apprenticeship" | "Live Project";
-export type ApplicationStatus = "Applied" | "Under Review" | "Shortlisted" | "Interview Scheduled" | "Offered" | "Rejected";
-
+export type Role = "student" | "industry" | "academician" | "institution";
+export type OpportunityType =
+  | "Internship"
+  | "Job"
+  | "Apprenticeship"
+  | "Live Project"
+  | "Training"
+  | "Workshop"
+  | "Mentorship"
+  | "FDP"
+  | "Faculty Internship"
+  | "Consultancy"
+  | "Research";
+export type ApplicationStatus =
+  | "Applied"
+  | "Under Review"
+  | "Shortlisted"
+  | "Interview Scheduled"
+  | "Offered"
+  | "Rejected"
+  | "Completed";
+export interface Profile {
+  id: string;
+  full_name: string;
+  role: Role;
+  headline: string;
+  location: string;
+  bio: string;
+  organization: string;
+  department: string;
+  program: string;
+  graduation_year: number | null;
+  website: string;
+  interests: string[];
+  discoverable: boolean;
+}
+export interface DirectoryPerson extends Partial<Profile> {
+  id: string;
+  full_name: string;
+  role: Role;
+  skills: string[];
+}
+export interface PortfolioRecord {
+  id: string;
+  user_id: string;
+  kind:
+    | "skill"
+    | "certification"
+    | "project"
+    | "education"
+    | "experience"
+    | "achievement"
+    | "document";
+  title: string;
+  organization: string;
+  description: string;
+  url: string;
+  issued_on: string | null;
+  expires_on: string | null;
+  document_path: string | null;
+  verified_at: string | null;
+  created_at: string;
+}
 export interface Opportunity {
   id: string;
+  ownerId: string;
   title: string;
   company: string;
   location: string;
   workMode: "Remote" | "Hybrid" | "On-site";
   duration: string;
   type: OpportunityType;
+  audience: "student" | "academician" | "all";
   stipend: string;
   deadline: string;
   skills: string[];
   description: string;
   seats: number;
-  status: "Open" | "Closing soon" | "Closed";
+  status: "Open" | "Closed";
   publishedAt: string;
+  requiresAssessment?: boolean;
+  assessmentCutoff?: number;
 }
-
 export interface Application {
   id: string;
   opportunityId: string;
+  applicantId: string;
   studentName: string;
   appliedAt: string;
   matchScore: number;
   status: ApplicationStatus;
   nextStep: string;
+  feedback: string;
+  progress: number;
+  updatedAt: string;
+  assessmentReportId?: string | null;
+  assessmentScore?: number | null;
+  assessmentPassed?: boolean;
+  proctoringTrust?: "Verified" | "Warnings Recorded" | "Disqualified";
+  proctoringViolations?: number;
 }
-
-export interface Candidate {
+export interface Membership {
   id: string;
-  name: string;
-  institution: string;
-  program: string;
-  skills: string[];
-  verifiedSkills: string[];
-  assessmentScore: number;
-  projects: number;
-  availability: string;
-  portfolioReady: boolean;
+  institution_id: string;
+  member_id: string;
+  status: "Pending" | "Approved" | "Declined";
 }
-
+export interface Progress {
+  user_id: string;
+  course_id: string;
+  module_id: string;
+  subtopic_id: string;
+  score: number;
+}
+export interface SkillEvidence {
+  id: string;
+  user_id: string;
+  skill: string;
+  score: number;
+  threshold: number;
+  question_count: number;
+  issuer_id: string;
+  assessment_report_id: string;
+  industry_assessment_id: string;
+  created_at: string;
+}
+export interface AssessmentReport {
+  industryAssessmentId?: string | null;
+  assessmentKind?: "industry" | "practice";
+  targetPercent?: number;
+  source?: string;
+  id: string;
+  userId?: string;
+  topicId: string;
+  topicTitle: string;
+  levelId: string;
+  levelTitle: string;
+  date: string;
+  scorePercent: number;
+  correctCount: number;
+  totalCount: number;
+  evaluatedQuestions: Array<{
+    id: number;
+    question: string;
+    options: string[];
+    chosenAnswer: number;
+    chosenText: string;
+    correctAnswer: number;
+    correctText: string;
+    isCorrect: boolean;
+    explanation: string;
+    skillArea: string;
+  }>;
+  skillBreakdown: Array<{
+    skill: string;
+    score: number;
+    benchmark: number;
+    trend: "up" | "down" | "neutral";
+  }>;
+  gapRecommendations: Array<{
+    gap: string;
+    resource: string;
+    priority: string;
+  }>;
+  disqualified?: boolean;
+  disqualificationReason?: string;
+  violations?: Array<{ type: string; reason: string; timestamp: string }>;
+}
 export interface PlatformData {
-  version: 1;
+  profile: Profile;
+  evidence: SkillEvidence[];
+  directory: DirectoryPerson[];
+  records: PortfolioRecord[];
   opportunities: Opportunity[];
   applications: Application[];
   savedOpportunityIds: string[];
-  shortlistedCandidateIds: string[];
+  memberships: Membership[];
+  reports: AssessmentReport[];
+  progress: Progress[];
 }
-
-const STORAGE_KEY = "origin-point:platform:v1";
-const UPDATE_EVENT = "origin-point-platform:updated";
-
-export const studentProfile = {
-  name: "Student User",
-  institution: "Origin Institute of Technology",
-  program: "B.Tech Computer Science",
-  skills: ["React", "TypeScript", "Node.js", "Python", "SQL", "Git", "REST APIs", "Figma"],
-  verifiedSkills: ["React", "SQL", "Python"],
-};
-
-const seedOpportunities: Opportunity[] = [
-  {
-    id: "opp-frontend-2026",
-    title: "Frontend Developer Intern",
-    company: "TechCorp India",
-    location: "Remote",
-    workMode: "Remote",
-    duration: "3 months",
-    type: "Internship",
-    stipend: "₹25,000 / month",
-    deadline: "2026-10-04",
-    skills: ["React", "TypeScript", "Git"],
-    description: "Build accessible product interfaces with a mentored engineering team. Includes weekly feedback and a verified completion record.",
-    seats: 8,
-    status: "Open",
-    publishedAt: "2026-09-12",
-  },
-  {
-    id: "opp-data-2026",
-    title: "Data Science Trainee",
-    company: "AnalyticsPro",
-    location: "Bengaluru",
-    workMode: "Hybrid",
-    duration: "6 months",
-    type: "Apprenticeship",
-    stipend: "₹20,000 / month",
-    deadline: "2026-09-22",
-    skills: ["Python", "SQL", "Data Analysis"],
-    description: "Learn on live analytics problems, complete a guided learning sprint, and present insights to an industry panel.",
-    seats: 15,
-    status: "Closing soon",
-    publishedAt: "2026-09-08",
-  },
-  {
-    id: "opp-product-2026",
-    title: "UX Research Fellow",
-    company: "DesignHub",
-    location: "Mumbai",
-    workMode: "Hybrid",
-    duration: "4 months",
-    type: "Internship",
-    stipend: "₹18,000 / month",
-    deadline: "2026-10-10",
-    skills: ["Figma", "User Research", "Communication"],
-    description: "Plan research, synthesize interviews, and prototype a meaningful product improvement with a design mentor.",
-    seats: 4,
-    status: "Open",
-    publishedAt: "2026-09-14",
-  },
-  {
-    id: "opp-cloud-2026",
-    title: "Cloud Deployment Live Project",
-    company: "Northstar Labs",
-    location: "Hyderabad",
-    workMode: "Remote",
-    duration: "8 weeks",
-    type: "Live Project",
-    stipend: "Certificate + mentor support",
-    deadline: "2026-09-28",
-    skills: ["Node.js", "AWS", "DevOps"],
-    description: "Ship a production-style service with CI/CD, monitoring, and a public project showcase. Ideal for cloud-curious teams.",
-    seats: 20,
-    status: "Open",
-    publishedAt: "2026-09-15",
-  },
-];
-
-export const seedCandidates: Candidate[] = [
-  {
-    id: "candidate-aarav",
-    name: "Aarav Mehta",
-    institution: "IIT Delhi",
-    program: "B.Tech Computer Science · Final year",
-    skills: ["React", "TypeScript", "Next.js", "Git"],
-    verifiedSkills: ["React", "TypeScript"],
-    assessmentScore: 92,
-    projects: 4,
-    availability: "Available now",
-    portfolioReady: true,
-  },
-  {
-    id: "candidate-meera",
-    name: "Meera Iyer",
-    institution: "NIT Trichy",
-    program: "B.Tech Data Science · Final year",
-    skills: ["Python", "SQL", "Tableau", "Data Analysis"],
-    verifiedSkills: ["Python", "SQL"],
-    assessmentScore: 87,
-    projects: 3,
-    availability: "Available from October",
-    portfolioReady: true,
-  },
-  {
-    id: "candidate-kabir",
-    name: "Kabir Shah",
-    institution: "Srishti Institute of Art, Design and Technology",
-    program: "B.Des Product Design · Final year",
-    skills: ["Figma", "User Research", "Prototyping", "Communication"],
-    verifiedSkills: ["Figma"],
-    assessmentScore: 81,
-    projects: 5,
-    availability: "Available now",
-    portfolioReady: true,
-  },
-  {
-    id: "candidate-nisha",
-    name: "Nisha Kulkarni",
-    institution: "VJTI Mumbai",
-    program: "B.Tech Computer Science · Third year",
-    skills: ["React", "JavaScript", "SQL", "Git"],
-    verifiedSkills: ["SQL"],
-    assessmentScore: 78,
-    projects: 2,
-    availability: "Available from November",
-    portfolioReady: false,
-  },
-];
-
-function seedPlatform(): PlatformData {
+const KEY = "/api/platform";
+async function fetchPlatform(): Promise<PlatformData> {
+  const response = await fetch(KEY, { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok)
+    throw new Error(body.error || "Could not load your workspace.");
+  return body;
+}
+export function usePlatformData() {
+  const {
+    data,
+    error,
+    isLoading,
+    mutate: refresh,
+  } = useSWR<PlatformData>(KEY, fetchPlatform, {
+    revalidateOnFocus: true,
+    refreshInterval: 30000,
+    shouldRetryOnError: false,
+  });
   return {
-    version: 1,
-    opportunities: seedOpportunities,
-    applications: [
-      {
-        id: "application-seed-1",
-        opportunityId: "opp-data-2026",
-        studentName: studentProfile.name,
-        appliedAt: "2026-09-08",
-        matchScore: 78,
-        status: "Under Review",
-        nextStep: "Recruiter screening in progress",
-      },
-    ],
-    savedOpportunityIds: ["opp-product-2026"],
-    shortlistedCandidateIds: [],
+    data,
+    error: error?.message as string | undefined,
+    loading: isLoading,
+    refresh,
   };
 }
-
-function isPlatformData(value: unknown): value is PlatformData {
-  return Boolean(value && typeof value === "object" && Array.isArray((value as PlatformData).opportunities));
+export function useAuthCacheBoundary() {
+  useEffect(() => {
+    let currentUser: string | null | undefined;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUser = session?.user?.id ?? null;
+      if (currentUser !== undefined && nextUser !== currentUser) {
+        void mutate(
+          (key) =>
+            typeof key === "string" &&
+            ["/api/platform", "/api/industry-assessments"].includes(key),
+          undefined,
+          { revalidate: !!nextUser },
+        );
+      }
+      currentUser = nextUser;
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
 }
+export async function refreshPlatform() {
+  await mutate(KEY);
+}
+export async function clearPlatformCache() {
+  await mutate(
+    (key) =>
+      typeof key === "string" &&
+      ["/api/platform", "/api/industry-assessments"].includes(key),
+    undefined,
+    { revalidate: false },
+  );
+}
+function check(error: { message: string } | null) {
+  if (error) throw new Error(error.message);
+}
+async function userId() {
+  const { data, error } = await supabase.auth.getUser();
+  check(error);
+  if (!data.user) throw new Error("Please sign in to continue.");
+  return data.user.id;
+}
+export const nextStatuses: Record<ApplicationStatus, ApplicationStatus[]> = {
+  Applied: ["Under Review", "Shortlisted", "Rejected"],
+  "Under Review": ["Shortlisted", "Rejected"],
+  Shortlisted: ["Interview Scheduled", "Offered", "Rejected"],
+  "Interview Scheduled": ["Offered", "Rejected"],
+  Offered: ["Completed"],
+  Rejected: [],
+  Completed: [],
+};
+export function getMatchScore(required: string[], candidate: string[] = []) {
+  const skills = [...new Set(required.map(normaliseSkill).filter(Boolean))];
+  if (!skills.length) return 0;
+  const actual = new Set(candidate.map(normaliseSkill));
+  return Math.round(
+    (skills.filter((skill) => actual.has(skill)).length / skills.length) * 100,
+  );
+}
+function normaliseSkill(skill: string) {
+  return skill.trim().toLowerCase();
+}
+export function getMatchedSkills(required: string[], candidate: string[] = []) {
+  return required.filter((s) =>
+    candidate.some((c) => normaliseSkill(c) === normaliseSkill(s)),
+  );
+}
+export function getMissingSkills(required: string[], candidate: string[] = []) {
+  return required.filter(
+    (s) => !candidate.some((c) => normaliseSkill(c) === normaliseSkill(s)),
+  );
+}
+export function ownSkills(data?: PlatformData) {
+  return (
+    data?.records
+      ?.filter((r) => r.user_id === data?.profile?.id && r.kind === "skill")
+      ?.map((r) => r.title) ?? []
+  );
+}
+export function isOpportunityOpen(opportunity: Opportunity) {
+  return (
+    opportunity.status === "Open" &&
+    Date.now() <=
+      new Date(opportunity.deadline + "T23:59:59.999+05:30").getTime()
+  );
+}
+export async function saveProfile(input: Partial<Profile>) {
+  const id = await userId();
+  const editable = [
+    "full_name",
+    "headline",
+    "location",
+    "bio",
+    "organization",
+    "department",
+    "program",
+    "graduation_year",
+    "website",
+    "interests",
+    "discoverable",
+  ] as const;
+  const fields = Object.fromEntries(
+    editable
+      .filter((key) => input[key] !== undefined)
+      .map((key) => [key, input[key]]),
+  );
+  const { error } = await supabase
+    .from("profiles")
+    .update(fields)
+    .eq("id", id)
+    .select("id")
+    .single();
+  check(error);
+  await refreshPlatform();
+}
+export async function addRecord(
+  input: Pick<PortfolioRecord, "kind" | "title"> & Partial<PortfolioRecord>,
+  file?: File | null,
+) {
+  const id = await userId();
+  let path: string | null = null;
+  if (file) {
+    if (
+      !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(
+        file.type,
+      ) ||
+      file.size > 10 * 1024 * 1024
+    )
+      throw new Error("Choose a PDF, JPG, PNG, or WebP file up to 10 MB.");
+    path =
+      id +
+      "/" +
+      crypto.randomUUID() +
+      "/" +
+      file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { error } = await supabase.storage
+      .from("portfolio-documents")
+      .upload(path, file);
+    check(error);
+  }
+  const { error } = await supabase.from("portfolio_records").insert({
+    user_id: id,
+    kind: input.kind,
+    title: input.title.trim(),
+    organization: input.organization || "",
+    description: input.description || "",
+    url: input.url || "",
+    issued_on: input.issued_on || null,
+    expires_on: input.expires_on || null,
+    document_path: path,
+  });
+  if (error && path)
+    await supabase.storage.from("portfolio-documents").remove([path]);
+  check(error);
+  await refreshPlatform();
+}
+export async function removeRecord(record: PortfolioRecord) {
+  const { error } = await supabase
+    .from("portfolio_records")
+    .delete()
+    .eq("id", record.id)
+    .eq("user_id", await userId())
+    .select("id")
+    .single();
+  check(error);
+  if (record.document_path) {
+    const { error: storageError } = await supabase.storage
+      .from("portfolio-documents")
+      .remove([record.document_path]);
+    if (storageError) {
+      await refreshPlatform();
+      throw new Error(
+        "The record was deleted, but its file could not be removed from storage. Contact the administrator for file cleanup.",
+      );
+    }
+  }
+  await refreshPlatform();
+}
+export async function documentUrl(path: string) {
+  const { data, error } = await supabase.storage
+    .from("portfolio-documents")
+    .createSignedUrl(path, 60);
+  check(error);
+  if (!data?.signedUrl) throw new Error("Could not open this document.");
+  return data.signedUrl;
+}
+export async function createOpportunity(
+  input: Omit<
+    Opportunity,
+    "id" | "ownerId" | "publishedAt" | "status" | "company"
+  > & {
+    attachedAssessment?: {
+      title: string;
+      summary: string;
+      questions: any[];
+      passingScore: number;
+    };
+  },
+) {
+  const id = await userId();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("organization, full_name")
+    .eq("id", id)
+    .single();
+  check(profileError);
+  const company = profile.organization?.trim() || profile.full_name?.trim();
+  if (!company)
+    throw new Error(
+      "Save your organization name in your profile before publishing.",
+    );
+  const { data, error } = await supabase
+    .from("opportunities")
+    .insert({
+      owner_id: id,
+      company,
+      title: input.title,
+      type: input.type,
+      audience: input.audience,
+      location: input.location,
+      work_mode: input.workMode,
+      duration: input.duration,
+      stipend: input.stipend,
+      deadline: input.deadline,
+      skills: input.skills,
+      description: input.description,
+      seats: input.seats,
+      requires_assessment: !!input.requiresAssessment,
+      assessment_cutoff: input.assessmentCutoff ?? 70,
+    })
+    .select("id")
+    .single();
+  check(error);
 
-export function getPlatformData(): PlatformData {
-  if (typeof window === "undefined") return seedPlatform();
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
-    if (isPlatformData(parsed)) return parsed;
-  } catch {
-    // A corrupt browser cache should never prevent access to the portal.
+  // If an assessment was authored or generated with the opportunity, publish it
+  if (input.requiresAssessment && input.attachedAssessment && data?.id) {
+    try {
+      const res = await fetch("/api/industry-assessments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: input.attachedAssessment.title,
+          summary: input.attachedAssessment.summary,
+          opportunity_id: data.id,
+          passing_score: input.attachedAssessment.passingScore || input.assessmentCutoff || 70,
+          publish: true,
+          questions: input.attachedAssessment.questions,
+        }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn("Failed to auto-publish assessment:", errJson.error);
+      }
+    } catch (err) {
+      console.warn("Assessment publish error:", err);
+    }
   }
 
-  const seed = seedPlatform();
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
-  return seed;
+  await refreshPlatform();
+  return data;
 }
-
-function commit(next: PlatformData) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  window.dispatchEvent(new Event(UPDATE_EVENT));
-}
-
-export function usePlatformData() {
-  const [platform, setPlatform] = useState<PlatformData | null>(null);
-
-  useEffect(() => {
-    const refresh = () => setPlatform(getPlatformData());
-    refresh();
-    window.addEventListener(UPDATE_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(UPDATE_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, []);
-
-  return platform;
-}
-
-export function getMatchScore(requiredSkills: string[], candidateSkills = studentProfile.skills, verifiedSkills = studentProfile.verifiedSkills) {
-  if (!requiredSkills.length) return 50;
-  const normalisedCandidateSkills = candidateSkills.map(normaliseSkill);
-  const normalisedVerifiedSkills = verifiedSkills.map(normaliseSkill);
-  const matches = requiredSkills.filter((skill) => normalisedCandidateSkills.includes(normaliseSkill(skill)));
-  const verifiedMatches = requiredSkills.filter((skill) => normalisedVerifiedSkills.includes(normaliseSkill(skill)));
-  const rawScore = 38 + (matches.length / requiredSkills.length) * 48 + (verifiedMatches.length / requiredSkills.length) * 14;
-  return Math.round(Math.min(98, rawScore));
-}
-
-export function getMatchedSkills(requiredSkills: string[], candidateSkills = studentProfile.skills) {
-  const normalisedCandidateSkills = candidateSkills.map(normaliseSkill);
-  return requiredSkills.filter((skill) => normalisedCandidateSkills.includes(normaliseSkill(skill)));
-}
-
-export function getMissingSkills(requiredSkills: string[], candidateSkills = studentProfile.skills) {
-  const normalisedCandidateSkills = candidateSkills.map(normaliseSkill);
-  return requiredSkills.filter((skill) => !normalisedCandidateSkills.includes(normaliseSkill(skill)));
-}
-
-function normaliseSkill(skill: string) {
-  return skill.trim().toLowerCase().replace(/\./g, "");
-}
-
-export function createOpportunity(input: Omit<Opportunity, "id" | "publishedAt" | "status">) {
-  const data = getPlatformData();
-  const opportunity: Opportunity = {
-    ...input,
-    id: `opp-${Date.now().toString(36)}`,
-    publishedAt: new Date().toISOString().slice(0, 10),
-    status: "Open",
-  };
-  commit({ ...data, opportunities: [opportunity, ...data.opportunities] });
-  return opportunity;
-}
-
-export function toggleSavedOpportunity(opportunityId: string) {
-  const data = getPlatformData();
-  const isSaved = data.savedOpportunityIds.includes(opportunityId);
-  commit({
-    ...data,
-    savedOpportunityIds: isSaved
-      ? data.savedOpportunityIds.filter((id) => id !== opportunityId)
-      : [...data.savedOpportunityIds, opportunityId],
+export async function autoShortlistCandidates(opportunityId: string, minScore?: number) {
+  const { data, error } = await supabase.rpc("auto_shortlist_candidates", {
+    opportunity_id: opportunityId,
+    min_score: minScore ?? null,
   });
+  check(error);
+  await refreshPlatform();
+  return Number(data ?? 0);
 }
-
-export function applyToOpportunity(opportunityId: string) {
-  const data = getPlatformData();
-  const existing = data.applications.find((application) => application.opportunityId === opportunityId && application.studentName === studentProfile.name);
-  if (existing) return { application: existing, created: false };
-
-  const opportunity = data.opportunities.find((item) => item.id === opportunityId);
-  if (!opportunity) throw new Error("This opportunity is no longer available.");
-
-  const application: Application = {
-    id: `application-${Date.now().toString(36)}`,
-    opportunityId,
-    studentName: studentProfile.name,
-    appliedAt: new Date().toISOString().slice(0, 10),
-    matchScore: getMatchScore(opportunity.skills),
-    status: "Applied",
-    nextStep: "Your application has been shared with the recruiter",
-  };
-  commit({ ...data, applications: [application, ...data.applications] });
-  return { application, created: true };
+export async function closeOpportunity(id: string) {
+  const { error } = await supabase
+    .from("opportunities")
+    .update({ status: "Closed" })
+    .eq("id", id)
+    .select("id")
+    .single();
+  check(error);
+  await refreshPlatform();
 }
-
-export function updateApplicationStatus(applicationId: string, status: ApplicationStatus) {
-  const data = getPlatformData();
-  const nextSteps: Record<ApplicationStatus, string> = {
-    Applied: "Your application has been shared with the recruiter",
-    "Under Review": "Recruiter screening in progress",
-    Shortlisted: "Your profile is shortlisted for the next round",
-    "Interview Scheduled": "Confirm your interview availability",
-    Offered: "Review and respond to your offer",
-    Rejected: "The recruiter has closed this application",
-  };
-  commit({
-    ...data,
-    applications: data.applications.map((application) =>
-      application.id === applicationId ? { ...application, status, nextStep: nextSteps[status] } : application
-    ),
+export async function toggleSavedOpportunity(id: string, saved: boolean) {
+  const user = await userId();
+  const result = saved
+    ? await supabase
+        .from("saved_opportunities")
+        .delete()
+        .eq("user_id", user)
+        .eq("opportunity_id", id)
+    : await supabase
+        .from("saved_opportunities")
+        .insert({ user_id: user, opportunity_id: id });
+  check(result.error);
+  await refreshPlatform();
+}
+export async function applyToOpportunity(id: string) {
+  const { error } = await supabase.rpc("apply_to_opportunity", {
+    opportunity: id,
   });
+  check(error);
+  await refreshPlatform();
 }
-
-export function toggleShortlistedCandidate(candidateId: string) {
-  const data = getPlatformData();
-  const exists = data.shortlistedCandidateIds.includes(candidateId);
-  commit({
-    ...data,
-    shortlistedCandidateIds: exists
-      ? data.shortlistedCandidateIds.filter((id) => id !== candidateId)
-      : [...data.shortlistedCandidateIds, candidateId],
-  });
+export async function updateApplicationStatus(
+  id: string,
+  status: ApplicationStatus,
+  nextStep?: string,
+  feedback?: string,
+  progress?: number,
+) {
+  const fields = {
+    status,
+    ...(nextStep !== undefined ? { next_step: nextStep } : {}),
+    ...(feedback !== undefined ? { feedback } : {}),
+    ...(progress !== undefined ? { progress } : {}),
+  };
+  const { error } = await supabase
+    .from("applications")
+    .update(fields)
+    .eq("id", id)
+    .select("id")
+    .single();
+  check(error);
+  await refreshPlatform();
 }
-
-export function resetDemoData() {
-  commit(seedPlatform());
+export async function requestMembership(institutionId: string) {
+  const { error } = await supabase
+    .from("institution_memberships")
+    .insert({ institution_id: institutionId, member_id: await userId() });
+  check(error);
+  await refreshPlatform();
+}
+export async function reviewMembership(
+  id: string,
+  status: "Approved" | "Declined",
+) {
+  const { error } = await supabase
+    .from("institution_memberships")
+    .update({ status })
+    .eq("id", id)
+    .select("id")
+    .single();
+  check(error);
+  await refreshPlatform();
+}
+export function exportRecords(filename: string, data: unknown) {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }

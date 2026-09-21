@@ -22,13 +22,14 @@ const roleOptions = [
     id: "student",
     label: "Student",
     subtitle: "Learners & Candidates",
-    desc: "Assess your skills, build a verified portfolio and land high-impact internships.",
+    desc: "Assess your skills, build a digital portfolio and land high-impact internships.",
     features: [
       "AI Skill Diagnostics & Benchmarking",
       "Dynamic Career & Internship Matcher",
-      "Cryptographically Verified Credential Hub",
+      "Private Credential & Project Library",
     ],
     Icon: GraduationCap,
+    icon: GraduationCap,
     accent: "#6366f1",        // indigo
     redirect: "/student",
   },
@@ -36,13 +37,14 @@ const roleOptions = [
     id: "industry",
     label: "Industry",
     subtitle: "Recruiters & Companies",
-    desc: "Post opportunities, discover verified talent and streamline technical hiring.",
+    desc: "Post opportunities, discover qualified talent and streamline technical hiring.",
     features: [
-      "AI-Powered Candidate Shortlisting",
+      "Application & Candidate Shortlisting",
       "Role-Specific Skill Gap Reports",
       "Direct Internship & Project Pipeline",
     ],
     Icon: Building2,
+    icon: Building2,
     accent: "#f59e0b",        // amber
     redirect: "/industry",
   },
@@ -57,6 +59,7 @@ const roleOptions = [
       "Faculty Development & Grant Tracking",
     ],
     Icon: BookOpen,
+    icon: BookOpen,
     accent: "#10b981",        // emerald
     redirect: "/academician",
   },
@@ -68,9 +71,10 @@ const roleOptions = [
     features: [
       "Real-time Placement Readiness Metrics",
       "Outcome-Based Curriculum Feedback",
-      "NIRF / NAAC Data Alignment Hub",
+      "Cohort Membership & Progress",
     ],
     Icon: Landmark,
+    icon: Landmark,
     accent: "#3b82f6",        // blue
     redirect: "/institution",
   },
@@ -83,14 +87,15 @@ function SelectRoleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isSignupIntent = searchParams.get("intent") === "signup";
-  const errorMessage = searchParams.get("error");
+  const [saveError, setSaveError] = useState("");
+  const errorMessage = saveError || searchParams.get("error");
 
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
-  const activeRole = roleOptions[selectedIndex];
+  const activeRole = roleOptions[selectedIndex] || roleOptions[0];
 
   useEffect(() => {
     async function loadUser() {
@@ -105,12 +110,6 @@ function SelectRoleContent() {
             .maybeSingle();
           if (profile?.role) {
             const idx = roleOptions.findIndex((r) => r.id === profile.role);
-            if (idx !== -1) setSelectedIndex(idx);
-          }
-        } else {
-          const savedRole = localStorage.getItem("selected_role");
-          if (savedRole) {
-            const idx = roleOptions.findIndex((r) => r.id === savedRole);
             if (idx !== -1) setSelectedIndex(idx);
           }
         }
@@ -130,38 +129,26 @@ function SelectRoleContent() {
   const handleConfirm = async () => {
     const roleId = activeRole.id;
     setIsSubmitting(true);
-    try {
-      localStorage.setItem("selected_role", roleId);
-      document.cookie = `skillsync_role=${roleId}; path=/; max-age=31536000`;
-    } catch { /* private mode */ }
+    setSaveError("");
 
-    if (isSignupIntent || !currentUser) {
+    if (!currentUser) {
       router.push(`/signup?role=${roleId}`);
       return;
     }
 
     try {
       if (currentUser?.id) {
-        await supabase.from("profiles").upsert(
-          {
-            id: currentUser.id,
-            email: currentUser.email,
-            full_name:
-              currentUser.user_metadata?.full_name ||
-              currentUser.user_metadata?.name ||
-              currentUser.email?.split("@")[0] ||
-              "User",
-            role: roleId,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
-        await supabase.auth.updateUser({ data: { role: roleId } });
+        const res = await fetch("/api/auth/set-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: roleId }),
+        });
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || "Failed to update role.");
       }
       router.push(activeRole.redirect || `/${roleId}`);
     } catch (err) {
-      console.error("Failed to set role:", err);
-      router.push(activeRole.redirect || `/${roleId}`);
+      setSaveError(err.message || "Your role could not be saved. Please retry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -173,7 +160,8 @@ function SelectRoleContent() {
     router.push("/login");
   };
 
-  const { icon: Icon, accent, subtitle, desc, features } = activeRole;
+  const Icon = activeRole?.Icon || activeRole?.icon || GraduationCap;
+  const { accent = "#6366f1", subtitle = "", desc = "", features = [] } = activeRole || {};
 
   return (
     /* Full-screen dark cinematic shell matching the landing page */

@@ -5,7 +5,18 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, ArrowRight, ArrowLeft, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  ArrowLeft,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  KeyRound,
+} from "lucide-react";
 import { GoogleIcon } from "@/components/ui/google-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +55,6 @@ function OtpInput({ value, onChange, disabled }) {
   const handleChange = (e, index) => {
     const raw = e.target.value.replace(/\D/g, "");
     if (!raw) return;
-    // Support paste: spread characters across boxes
     const chars = raw.slice(0, OTP_LENGTH - index).split("");
     const next = value.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
     chars.forEach((ch, i) => {
@@ -111,9 +121,13 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [step, setStep] = useState("email"); // "email" | "otp"
+  // Mode: "password" | "otp-email" | "otp-verify"
+  const [loginMode, setLoginMode] = useState("password");
   const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [formError, setFormError] = useState("");
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -137,46 +151,121 @@ function LoginForm() {
     }
   }, [searchParams]);
 
-  // ── Step 1: Send OTP ────────────────────────────────────────────────────
-  const handleSendOtp = async (e) => {
+  // Helper to redirect user to role home after auth
+  const routeUserToDashboard = async (user) => {
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const userRole = profile?.role || user.user_metadata?.role;
+      if (userRole && VALID_ROLES.includes(userRole)) {
+        router.push(`/${userRole}`);
+        return;
+      }
+    } catch (profileErr) {
+      console.warn("Could not fetch profile role:", profileErr);
+    }
+    router.push("/select-role");
+  };
+
+  // ── Password Login Handler ─────────────────────────────────────────────
+  const handlePasswordLogin = async (e) => {
     e.preventDefault();
-    setEmailError("");
+    setFormError("");
     setNotice({ type: "", msg: "" });
 
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed) { setEmailError("Email is required"); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setEmailError("Please enter a valid email address"); return; }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setFormError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
+    if (!password) {
+      setFormError("Password is required.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
+
+      if (error) {
+        if (error.message?.toLowerCase().includes("invalid login credentials")) {
+          setFormError("Invalid email or password. Please check your credentials or reset your password.");
+        } else if (error.message?.toLowerCase().includes("email not confirmed")) {
+          setFormError("Email not verified yet. Please check your inbox or sign in with an email code.");
+        } else {
+          setFormError(error.message || "Failed to sign in. Please try again.");
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        await routeUserToDashboard(data.user);
+      }
+    } catch (err) {
+      setFormError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── OTP Flow: Send Code ────────────────────────────────────────────────
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setFormError("");
+    setNotice({ type: "", msg: "" });
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setFormError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
 
     setIsLoading(true);
     try {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmed, mode: "login" }),
+        body: JSON.stringify({ email: trimmedEmail, mode: "login" }),
       });
       const resData = await res.json();
 
       if (!res.ok || resData.error) {
         if (res.status === 404) {
-          setEmailError("No account found for this email. Please sign up first.");
+          setFormError("No account found for this email. Please sign up first.");
         } else {
-          setEmailError(resData.error || "Failed to send code. Please try again.");
+          setFormError(resData.error || "Failed to send code. Please try again.");
         }
         setIsLoading(false);
         return;
       }
 
-      setStep("otp");
+      setLoginMode("otp-verify");
       startTimer();
-      setNotice({ type: "success", msg: `A 6-digit code was sent to ${trimmed}` });
+      setNotice({ type: "success", msg: `A 6-digit sign-in code was sent to ${trimmedEmail}` });
     } catch (err) {
-      setEmailError(err.message || "Something went wrong. Please try again.");
+      setFormError(err.message || "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Step 2: Verify OTP ──────────────────────────────────────────────────
+  // ── OTP Flow: Verify Code ──────────────────────────────────────────────
   const handleVerifyOtp = async (e) => {
     e?.preventDefault();
     setOtpError("");
@@ -207,21 +296,7 @@ function LoginForm() {
       }
 
       if (data?.user) {
-        try {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", data.user.id)
-            .maybeSingle();
-
-          if (profile?.role && VALID_ROLES.includes(profile.role)) {
-            router.push(`/${profile.role}`);
-            return;
-          }
-        } catch (profileErr) {
-          console.warn("Could not fetch profile role:", profileErr);
-        }
-        router.push("/select-role");
+        await routeUserToDashboard(data.user);
       }
     } catch (err) {
       setOtpError(err.message || "Verification failed. Please try again.");
@@ -230,15 +305,15 @@ function LoginForm() {
     }
   };
 
-  // Auto-submit when all 6 digits filled
+  // Auto-submit OTP when all 6 digits filled
   useEffect(() => {
-    if (otp.replace(/\D/g, "").length === OTP_LENGTH && step === "otp") {
+    if (otp.replace(/\D/g, "").length === OTP_LENGTH && loginMode === "otp-verify") {
       handleVerifyOtp();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [otp]);
 
-  const handleResend = async () => {
+  const handleResendOtp = async () => {
     if (!canResend) return;
     setOtp("");
     setOtpError("");
@@ -322,10 +397,10 @@ function LoginForm() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {/* ── STEP 1: Email ──────────────────────────────────────────── */}
-        {step === "email" && (
+        {/* ── MODE 1: Email + Password Login (Default) ──────────────────── */}
+        {loginMode === "password" && (
           <motion.div
-            key="step-email"
+            key="login-password"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -333,12 +408,15 @@ function LoginForm() {
           >
             <h1 className="font-display text-2xl font-bold mb-1">Welcome back</h1>
             <p className="text-muted-foreground text-sm mb-6">
-              Enter your email and we&apos;ll send you a sign-in code.
+              Sign in with your email and password to access your workspace.
             </p>
 
-            <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+            <form onSubmit={handlePasswordLogin} noValidate className="space-y-4">
+              {/* Email */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="login-email">Email</label>
+                <label className="text-sm font-medium" htmlFor="login-email">
+                  Email
+                </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -349,12 +427,57 @@ function LoginForm() {
                     placeholder="Enter your email address"
                     className="auth-card-input pl-9"
                     value={email}
-                    onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFormError("");
+                    }}
                     disabled={isLoading}
                   />
                 </div>
-                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium" htmlFor="login-password">
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    className="auth-card-input pl-9 pr-10"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFormError("");
+                    }}
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {formError && (
+                <p className="text-xs text-destructive">{formError}</p>
+              )}
 
               <Button
                 type="submit"
@@ -364,11 +487,11 @@ function LoginForm() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Sending code…
+                    Signing in…
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
-                    Continue
+                    Sign In
                     <ArrowRight className="h-4 w-4" />
                   </span>
                 )}
@@ -381,24 +504,37 @@ function LoginForm() {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-3 text-muted-foreground">or continue with</span>
+                <span className="bg-background px-3 text-muted-foreground">or</span>
               </div>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleGoogleAuth}
-              disabled={isLoading || isGoogleLoading}
-              className="auth-card-outline h-11 w-full flex items-center justify-center gap-2"
-            >
-              {isGoogleLoading ? (
-                <span className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              ) : (
-                <GoogleIcon className="h-4 w-4" />
-              )}
-              <span>Continue with Google</span>
-            </Button>
+            <div className="space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGoogleAuth}
+                disabled={isLoading || isGoogleLoading}
+                className="auth-card-outline h-11 w-full flex items-center justify-center gap-2"
+              >
+                {isGoogleLoading ? (
+                  <span className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                ) : (
+                  <GoogleIcon className="h-4 w-4" />
+                )}
+                <span>Continue with Google</span>
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode("otp-email");
+                  setFormError("");
+                }}
+                className="w-full py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-medium text-center"
+              >
+                Sign in with one-time email code instead
+              </button>
+            </div>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
               New here?{" "}
@@ -409,10 +545,10 @@ function LoginForm() {
           </motion.div>
         )}
 
-        {/* ── STEP 2: OTP ────────────────────────────────────────────── */}
-        {step === "otp" && (
+        {/* ── MODE 2: OTP Email Request ─────────────────────────────────── */}
+        {loginMode === "otp-email" && (
           <motion.div
-            key="step-otp"
+            key="login-otp-email"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -420,7 +556,84 @@ function LoginForm() {
           >
             <button
               type="button"
-              onClick={() => { setStep("email"); setOtp(""); setOtpError(""); setNotice({ type: "", msg: "" }); }}
+              onClick={() => {
+                setLoginMode("password");
+                setFormError("");
+              }}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to password login
+            </button>
+
+            <h1 className="font-display text-2xl font-bold mb-1">Sign in with email code</h1>
+            <p className="text-muted-foreground text-sm mb-6">
+              Enter your email and we&apos;ll send you a 6-digit code to sign in.
+            </p>
+
+            <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="otp-email-input">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="otp-email-input"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    placeholder="Enter your email address"
+                    className="auth-card-input pl-9"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFormError("");
+                    }}
+                    disabled={isLoading}
+                  />
+                </div>
+                {formError && <p className="text-xs text-destructive">{formError}</p>}
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="auth-card-submit w-full h-11"
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Sending code…
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Send Code
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                )}
+              </Button>
+            </form>
+          </motion.div>
+        )}
+
+        {/* ── MODE 3: OTP Verification ──────────────────────────────────── */}
+        {loginMode === "otp-verify" && (
+          <motion.div
+            key="login-otp-verify"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMode("otp-email");
+                setOtp("");
+                setOtpError("");
+                setNotice({ type: "", msg: "" });
+              }}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -471,7 +684,7 @@ function LoginForm() {
               {canResend ? (
                 <button
                   type="button"
-                  onClick={handleResend}
+                  onClick={handleResendOtp}
                   disabled={isLoading}
                   className="inline-flex items-center gap-1 font-semibold text-foreground hover:underline disabled:opacity-50"
                 >

@@ -1,104 +1,86 @@
 "use client";
-
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { Menu, Settings, X } from "lucide-react";
+import { roleNavigation } from "./sidebar";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  ClipboardCheck,
-  Briefcase,
-  FileText,
-  User,
-  Building2,
-  Users,
-  FolderKanban,
-  BookMarked,
-  Handshake,
-  FlaskConical,
-  BarChart3,
-  TrendingUp,
-  PieChart,
-} from "lucide-react";
-
-const roleTabs = {
-  student: [
-    { label: "Home", href: "/student", icon: LayoutDashboard },
-    { label: "Assess", href: "/student/assessment", icon: ClipboardCheck },
-    { label: "Jobs", href: "/student/marketplace", icon: Briefcase },
-    { label: "Portfolio", href: "/student/portfolio", icon: FileText },
-    { label: "Profile", href: "/student/profile", icon: User },
-  ],
-  industry: [
-    { label: "Home", href: "/industry", icon: LayoutDashboard },
-    { label: "Post", href: "/industry/post", icon: Briefcase },
-    { label: "Candidates", href: "/industry/candidates", icon: Users },
-    { label: "Shortlist", href: "/industry/shortlist", icon: FolderKanban },
-    { label: "Profile", href: "/industry/profile", icon: Building2 },
-  ],
-  academician: [
-    { label: "Home", href: "/academician", icon: LayoutDashboard },
-    { label: "FDPs", href: "/academician/fdps", icon: BookMarked },
-    { label: "Consult", href: "/academician/consultancy", icon: Handshake },
-    { label: "Research", href: "/academician/research", icon: FlaskConical },
-    { label: "Profile", href: "/academician/profile", icon: User },
-  ],
-  institution: [
-    { label: "Home", href: "/institution", icon: LayoutDashboard },
-    { label: "Skills", href: "/institution/skills", icon: BarChart3 },
-    { label: "Placement", href: "/institution/placement", icon: TrendingUp },
-    { label: "Recruit", href: "/institution/recruitment", icon: PieChart },
-    { label: "Profile", href: "/institution/profile", icon: User },
-  ],
-};
-
 export function MobileBottomNav({ role = "student" }) {
   const pathname = usePathname();
-  const tabs = roleTabs[role] || roleTabs.student;
-
+  const [open, setOpen] = useState(false);
+  const items = [
+    ...(roleNavigation[role] || roleNavigation.student),
+    {
+      label: "Profile & credentials",
+      href: `/${role}/profile`,
+      icon: Settings,
+    },
+  ];
+  useEffect(() => setOpen(false), [pathname]);
   return (
     <nav
-      className={cn(
-        "fixed bottom-0 left-0 right-0 z-sticky md:hidden",
-        "glass-heavy border-t border-border",
-        "safe-area-inset-bottom"
-      )}
+      aria-label="Mobile workspace navigation"
+      className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl md:hidden safe-area-inset-bottom"
     >
-      <div className="flex items-center justify-around h-16 px-1">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive =
-            pathname === tab.href ||
-            (tab.href !== `/${role}` && pathname.startsWith(tab.href));
-
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={cn(
-                "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors",
-                isActive
-                  ? "role-text"
-                  : "text-muted-foreground"
-              )}
+      {open && (
+        <div
+          id="mobile-workspace-menu"
+          className="max-h-[65vh] overflow-auto border-b border-border p-4"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold">Your workspace</p>
+            <button
+              aria-label="Close menu"
+              onClick={() => setOpen(false)}
+              className="p-2"
             >
-              <div className="relative">
-                <Icon className={cn("h-5 w-5", isActive && "role-text")} />
-                {isActive && (
-                  <div
-                    className="absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
-                    style={{ background: "hsl(var(--role-primary))" }}
-                  />
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl p-3 text-xs",
+                  pathname === item.href
+                    ? "role-bg-soft role-text"
+                    : "bg-muted/40 text-muted-foreground",
                 )}
-              </div>
-              <span className={cn(
-                "text-[0.6rem] font-medium leading-none",
-                isActive ? "role-text" : "text-muted-foreground"
-              )}>
-                {tab.label}
-              </span>
-            </Link>
-          );
-        })}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex h-16 items-center justify-around">
+        {items.slice(0, 3).map((item) => (
+          <Link
+            href={item.href}
+            key={item.href}
+            aria-current={pathname === item.href ? "page" : undefined}
+            className={cn(
+              "flex flex-1 flex-col items-center gap-1 py-2 text-[10px]",
+              pathname === item.href ? "role-text" : "text-muted-foreground",
+            )}
+          >
+            <item.icon className="h-5 w-5" />
+            {item.label}
+          </Link>
+        ))}
+        <button
+          aria-expanded={open}
+          aria-controls="mobile-workspace-menu"
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 flex-col items-center gap-1 py-2 text-[10px] role-text"
+        >
+          <Menu className="h-5 w-5" />
+          All pages
+        </button>
       </div>
     </nav>
   );

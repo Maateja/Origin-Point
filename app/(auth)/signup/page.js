@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   RefreshCw,
   CheckCircle2,
+  Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { GoogleIcon } from "@/components/ui/google-icon";
 import { Button } from "@/components/ui/button";
@@ -44,7 +47,7 @@ const roleOptions = [
     id: "student",
     label: "Student",
     subtitle: "Learners & Candidates",
-    desc: "Assess skills, build verified portfolio & land high-impact internships.",
+    desc: "Assess skills, build digital portfolio & land high-impact internships.",
     features: [
       "AI Skill Diagnostics & Benchmarking",
       "Dynamic Career & Internship Matcher",
@@ -59,7 +62,7 @@ const roleOptions = [
     id: "industry",
     label: "Industry",
     subtitle: "Recruiters & Companies",
-    desc: "Post opportunities, discover verified talent & streamline technical hiring.",
+    desc: "Post opportunities, discover qualified talent & streamline technical hiring.",
     features: [
       "AI-Powered Candidate Shortlisting",
       "Role-Specific Skill Gap Reports",
@@ -206,6 +209,11 @@ function SignUpForm() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingName, setPendingName] = useState("");
   const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -226,25 +234,11 @@ function SignUpForm() {
       const idx = roleOptions.findIndex((r) => r.id === queryRole);
       if (idx !== -1) setWheelIndex(idx);
       setStep(2);
-      try { localStorage.setItem("selected_role", queryRole); } catch {}
-    } else {
-      try {
-        const saved = localStorage.getItem("selected_role");
-        if (saved && roleOptions.some((r) => r.id === saved)) {
-          setSelectedRole(saved);
-          const idx = roleOptions.findIndex((r) => r.id === saved);
-          if (idx !== -1) setWheelIndex(idx);
-        }
-      } catch {}
     }
   }, [searchParams]);
 
   const handleRoleSelect = (roleId) => {
     setSelectedRole(roleId);
-    try {
-      localStorage.setItem("selected_role", roleId);
-      document.cookie = `skillsync_role=${roleId}; path=/; max-age=31536000`;
-    } catch {}
     setStep(2);
   };
 
@@ -277,7 +271,6 @@ function SignUpForm() {
 
       setPendingEmail(normalizedEmail);
       setPendingName(normalizedName);
-      try { localStorage.setItem("skillsync_user_name", normalizedName); } catch {}
       setStep(3);
       startTimer();
       setNotice({ type: "success", msg: `Code sent to ${normalizedEmail}` });
@@ -319,28 +312,53 @@ function SignUpForm() {
       }
 
       if (data?.user) {
-        // Upsert the profile with the role chosen during signup
-        await supabase.from("profiles").upsert(
-          {
-            id: data.user.id,
-            email: data.user.email,
-            full_name:
-              pendingName ||
-              data.user.user_metadata?.full_name ||
-              data.user.email?.split("@")[0] ||
-              "User",
-            role: selectedRole,
-            avatar_url: data.user.user_metadata?.avatar_url || null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
+        // Persist the exact role chosen during signup via admin endpoint
+        await fetch("/api/auth/set-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: selectedRole }),
+        });
 
-        const roleOption = roleOptions.find((r) => r.id === selectedRole);
-        router.push(roleOption?.redirect || `/${selectedRole}`);
+        // Update full_name if provided
+        const fullName = pendingName || data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User";
+        await supabase.from("profiles").update({
+          full_name: fullName,
+          updated_at: new Date().toISOString(),
+        }).eq("id", data.user.id);
+
+        setStep(4);
+        setNotice({
+          type: "success",
+          msg: "Email verified! Create a password to easily sign in next time.",
+        });
       }
     } catch (err) {
       setOtpError(err.message || "Verification failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    setPasswordError("");
+
+    if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      router.push(`/${selectedRole}`);
+    } catch (err) {
+      setPasswordError(err.message || "Failed to set password. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -389,7 +407,6 @@ function SignUpForm() {
     setAuthError("");
     const roleToAssign = selectedRole || "student";
     try {
-      localStorage.setItem("selected_role", roleToAssign);
       document.cookie = `skillsync_role=${roleToAssign}; path=/; max-age=31536000`;
     } catch {}
     try {
@@ -817,6 +834,103 @@ function SignUpForm() {
               <p className="mt-4 text-center text-xs text-muted-foreground">
                 Code expires in 5 minutes
               </p>
+            </>
+          )}
+
+          {/* ── STEP 4: Set permanent password ─────────────────────── */}
+          {step === 4 && (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Email Verified
+                </span>
+              </div>
+
+              <h1 className="font-display text-2xl font-bold mb-1">Create your password</h1>
+              <p className="text-muted-foreground text-sm mb-6">
+                Set a password so you can sign in directly anytime without needing an email code.
+              </p>
+
+              <form onSubmit={handleSetPassword} noValidate className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">New Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      required
+                      minLength={8}
+                      className="auth-card-input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Confirm Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      required
+                      minLength={8}
+                      className="auth-card-input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <p className="text-xs text-destructive">{passwordError}</p>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={isLoading || !password || !confirmPassword}
+                  className="auth-card-submit w-full h-11 mt-2 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Saving Password…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Lock className="h-4 w-4" />
+                      Save Password & Launch Dashboard
+                    </span>
+                  )}
+                </Button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/${selectedRole}`)}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                  >
+                    Skip for now (you can set a password anytime)
+                  </button>
+                </div>
+              </form>
             </>
           )}
         </motion.div>

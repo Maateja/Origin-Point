@@ -1,5 +1,5 @@
-import { WorkspacePage } from "@/components/dashboard/workspace-page";
+import { CandidateHub } from "@/components/industry/candidate-hub";
 
 export default function IndustryCandidatesPage() {
-  return <WorkspacePage role="industry" pageKey="industry/candidates" />;
+  return <CandidateHub />;
 }

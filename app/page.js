@@ -128,7 +128,7 @@ export default function LandingPage() {
           A centralized portal connecting <strong className="text-white/80 font-medium">students</strong>,{" "}
           <strong className="text-white/80 font-medium">industries</strong>, and{" "}
           <strong className="text-white/80 font-medium">academicians</strong> — through AI-powered
-          skill assessments, verified portfolios, internship matching, and
+          skill assessments, digital portfolios, internship matching, and
           placement analytics. One platform for the complete career lifecycle.
         </p>
 

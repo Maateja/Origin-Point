@@ -24,8 +24,11 @@ import { OriginWordmark } from "@/components/shared/origin-logo";
 
 const resetPasswordSchema = z
   .object({
-    password: z.string().min(6, "Password must be at least 6 characters"),
-    confirmPassword: z.string().min(6, "Please confirm your password"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(128),
+    confirmPassword: z.string().min(8, "Please confirm your password").max(128),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
@@ -45,7 +48,9 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     async function checkAuthSession() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (session) {
           setHasSession(true);
         } else {
@@ -55,7 +60,7 @@ export default function ResetPasswordPage() {
               if (event === "PASSWORD_RECOVERY" || currentSession) {
                 setHasSession(true);
               }
-            }
+            },
           );
           return () => {
             authListener?.subscription?.unsubscribe();
@@ -90,7 +95,9 @@ export default function ResetPasswordPage() {
       });
 
       if (error) {
-        setAuthError(error.message || "Failed to update password. Please try again.");
+        setAuthError(
+          error.message || "Failed to update password. Please try again.",
+        );
         setIsLoading(false);
         return;
       }
@@ -139,7 +146,8 @@ export default function ResetPasswordPage() {
               Password updated!
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground mb-6">
-              Your password has been successfully updated in the database. You can now use your email and this new password to sign in anytime.
+              Your password has been successfully updated in the database. You
+              can now use your email and this new password to sign in anytime.
             </p>
 
             <div className="space-y-3">
@@ -169,7 +177,8 @@ export default function ResetPasswordPage() {
               Invalid or Expired Link
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground mb-6">
-              This password reset link is invalid or has expired. For security reasons, reset links can only be used once.
+              This password reset link is invalid or has expired. For security
+              reasons, reset links can only be used once.
             </p>
 
             <Link
@@ -200,7 +209,11 @@ export default function ResetPasswordPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              noValidate
+              className="space-y-4"
+            >
               {/* New Password */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="reset-password">
@@ -211,7 +224,7 @@ export default function ResetPasswordPage() {
                   <Input
                     id="reset-password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     className="auth-card-input pl-9 pr-10"
                     {...register("password")}
                   />
@@ -219,7 +232,9 @@ export default function ResetPasswordPage() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -229,7 +244,9 @@ export default function ResetPasswordPage() {
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="text-xs text-destructive">{errors.password.message}</p>
+                  <p className="text-xs text-destructive">
+                    {errors.password.message}
+                  </p>
                 )}
               </div>
 
@@ -279,7 +296,7 @@ export default function ResetPasswordPage() {
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
-                    Update Password & Database
+                    Update Password
                     <ArrowRight className="h-4 w-4" />
                   </span>
                 )}
