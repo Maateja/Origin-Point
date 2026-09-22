@@ -13,6 +13,19 @@ export async function GET() {
       { status: 401 },
     );
   try {
+    // Do not show alias-aware scores while the database still scores exact names.
+    const { data: taxonomyVersion, error: taxonomyError } = await db.rpc(
+      "skill_taxonomy_version",
+    );
+    if (taxonomyError || taxonomyVersion !== 1) {
+      return NextResponse.json(
+        {
+          error:
+            "Shared skill matching needs the skill-taxonomy database update (202609220002). Apply the migration, then retry.",
+        },
+        { status: 503, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
     async function rows(table: string, order: string[]) {
       const all: any[] = [];
       for (let offset = 0; ; offset += 500) {
@@ -55,9 +68,12 @@ export async function GET() {
     let profileData = profile;
     if (profileError || !profileData) {
       const meta = (user.user_metadata as Record<string, any>) || {};
-      const fallbackRole = ["student", "industry", "academician", "institution"].includes(
-        meta.role,
-      )
+      const fallbackRole = [
+        "student",
+        "industry",
+        "academician",
+        "institution",
+      ].includes(meta.role)
         ? meta.role
         : "student";
       const { data: newProfile } = await db

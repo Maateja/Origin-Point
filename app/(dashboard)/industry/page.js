@@ -1,10 +1,5 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { RoleOverview } from "@/components/dashboard/role-overview";
+import { IndustryCommandCenter } from "@/components/platform/industry-command-center";
 
 export default function IndustryDashboardPage() {
-  return (
-    <DashboardShell role="industry" title="Dashboard">
-      <RoleOverview role="industry" />
-    </DashboardShell>
-  );
+  return <IndustryCommandCenter />;
 }

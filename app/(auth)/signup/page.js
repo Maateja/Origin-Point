@@ -55,7 +55,8 @@ const roleOptions = [
     ],
     icon: GraduationCap,
     gradient: "from-indigo-500 to-cyan-400",
-    badgeColor: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+    badgeColor:
+      "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
     redirect: "/student",
   },
   {
@@ -70,7 +71,8 @@ const roleOptions = [
     ],
     icon: Building2,
     gradient: "from-amber-500 to-orange-400",
-    badgeColor: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    badgeColor:
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     redirect: "/industry",
   },
   {
@@ -85,7 +87,8 @@ const roleOptions = [
     ],
     icon: BookOpen,
     gradient: "from-emerald-500 to-teal-400",
-    badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    badgeColor:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     redirect: "/academician",
   },
   {
@@ -100,14 +103,15 @@ const roleOptions = [
     ],
     icon: Landmark,
     gradient: "from-blue-500 to-indigo-500",
-    badgeColor: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    badgeColor:
+      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
     redirect: "/institution",
   },
 ];
 
 const ROLE_ACCENTS = {
-  student:     "#6366f1",
-  industry:    "#f59e0b",
+  student: "#6366f1",
+  industry: "#f59e0b",
   academician: "#10b981",
   institution: "#3b82f6",
 };
@@ -119,7 +123,10 @@ const RESEND_COOLDOWN = 60;
 // ─── 6-box OTP Input ─────────────────────────────────────────────────────────
 function OtpInput({ value, onChange, disabled }) {
   const inputRefs = useRef([]);
-  const digits = value.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
+  const digits = value
+    .split("")
+    .concat(Array(OTP_LENGTH).fill(""))
+    .slice(0, OTP_LENGTH);
 
   const handleKeyDown = (e, index) => {
     if (e.key === "Backspace") {
@@ -144,8 +151,13 @@ function OtpInput({ value, onChange, disabled }) {
     const raw = e.target.value.replace(/\D/g, "");
     if (!raw) return;
     const chars = raw.slice(0, OTP_LENGTH - index).split("");
-    const next = value.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
-    chars.forEach((ch, i) => { if (index + i < OTP_LENGTH) next[index + i] = ch; });
+    const next = value
+      .split("")
+      .concat(Array(OTP_LENGTH).fill(""))
+      .slice(0, OTP_LENGTH);
+    chars.forEach((ch, i) => {
+      if (index + i < OTP_LENGTH) next[index + i] = ch;
+    });
     onChange(next.join(""));
     const focusIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
     inputRefs.current[focusIndex]?.focus();
@@ -153,7 +165,10 @@ function OtpInput({ value, onChange, disabled }) {
 
   const handlePaste = (e) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LENGTH);
     if (!pasted) return;
     onChange(pasted.padEnd(OTP_LENGTH, "").slice(0, OTP_LENGTH));
     inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
@@ -176,7 +191,9 @@ function OtpInput({ value, onChange, disabled }) {
           className={[
             "w-11 h-14 text-center text-xl font-bold rounded-xl border-2 bg-background transition-all duration-150 outline-none",
             "focus:border-primary focus:ring-2 focus:ring-primary/20",
-            digit ? "border-primary/60 text-foreground" : "border-border text-muted-foreground",
+            digit
+              ? "border-primary/60 text-foreground"
+              : "border-border text-muted-foreground",
             disabled ? "opacity-50 cursor-not-allowed" : "cursor-text",
           ].join(" ")}
           aria-label={`OTP digit ${i + 1}`}
@@ -223,7 +240,12 @@ function SignUpForm() {
 
   const { seconds, start: startTimer, canResend } = useResendTimer();
 
-  const { register, handleSubmit, formState: { errors }, getValues } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    getValues,
+  } = useForm({
     resolver: zodResolver(signupSchema),
   });
 
@@ -264,7 +286,10 @@ function SignUpForm() {
       const resData = await res.json();
 
       if (!res.ok || resData.error) {
-        setAuthError(resData.error || "Failed to send verification code. Please try again.");
+        setAuthError(
+          resData.error ||
+            "Failed to send verification code. Please try again.",
+        );
         setIsLoading(false);
         return;
       }
@@ -275,7 +300,9 @@ function SignUpForm() {
       startTimer();
       setNotice({ type: "success", msg: `Code sent to ${normalizedEmail}` });
     } catch (err) {
-      setAuthError(err.message || "An unexpected error occurred. Please try again.");
+      setAuthError(
+        err.message || "An unexpected error occurred. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -320,11 +347,18 @@ function SignUpForm() {
         });
 
         // Update full_name if provided
-        const fullName = pendingName || data.user.user_metadata?.full_name || data.user.email?.split("@")[0] || "User";
-        await supabase.from("profiles").update({
-          full_name: fullName,
-          updated_at: new Date().toISOString(),
-        }).eq("id", data.user.id);
+        const fullName =
+          pendingName ||
+          data.user.user_metadata?.full_name ||
+          data.user.email?.split("@")[0] ||
+          "User";
+        await supabase
+          .from("profiles")
+          .update({
+            full_name: fullName,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.user.id);
 
         setStep(4);
         setNotice({
@@ -358,7 +392,9 @@ function SignUpForm() {
       if (error) throw error;
       router.push(`/${selectedRole}`);
     } catch (err) {
-      setPasswordError(err.message || "Failed to set password. Please try again.");
+      setPasswordError(
+        err.message || "Failed to set password. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -369,7 +405,7 @@ function SignUpForm() {
     if (otp.replace(/\D/g, "").length === OTP_LENGTH && step === 3) {
       handleVerifyOtp();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [otp]);
 
   const handleResend = async () => {
@@ -393,7 +429,10 @@ function SignUpForm() {
         setOtpError(resData.error || "Failed to resend code.");
       } else {
         startTimer();
-        setNotice({ type: "success", msg: "A new code has been sent to your email." });
+        setNotice({
+          type: "success",
+          msg: "A new code has been sent to your email.",
+        });
       }
     } catch (err) {
       setOtpError(err.message || "Failed to resend code.");
@@ -438,27 +477,36 @@ function SignUpForm() {
 
     return (
       <div
-        className="h-screen w-full flex flex-col overflow-hidden"
-        style={{ background: "hsl(201,100%,8%)", fontFamily: "'Inter', sans-serif", color: "#fff" }}
+        className="auth-role-shell h-screen w-full flex flex-col overflow-hidden"
+        style={{ fontFamily: "var(--font-body)" }}
       >
         {/* Ambient accent glow */}
         <div
           className="pointer-events-none fixed inset-0 z-0 transition-all duration-700"
-          style={{ background: `radial-gradient(ellipse 60% 55% at 70% 50%, ${accent}22 0%, transparent 70%)` }}
+          style={{
+            background: `radial-gradient(ellipse 60% 55% at 70% 50%, ${accent}22 0%, transparent 70%)`,
+          }}
         />
 
         {/* Nav */}
         <nav className="relative z-10 flex items-center justify-between px-8 py-5 max-w-7xl mx-auto w-full shrink-0">
           <Link
             href="/"
-            className="text-2xl tracking-tight text-white leading-none select-none"
-            style={{ fontFamily: "'Instrument Serif', serif" }}
+            className="text-2xl font-semibold tracking-tight text-foreground leading-none select-none"
+            style={{ fontFamily: "var(--font-display)" }}
           >
-            Origin Point<sup className="text-xs text-white/50 ml-0.5">®</sup>
+            Origin Point
+            <sup className="text-xs text-muted-foreground ml-0.5">®</sup>
           </Link>
-          <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <p
+            className="text-sm"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
             Already have an account?{" "}
-            <Link href="/login" className="text-white hover:underline font-medium">
+            <Link
+              href="/login"
+              className="text-foreground hover:underline font-medium"
+            >
               Log In
             </Link>
           </p>
@@ -468,7 +516,13 @@ function SignUpForm() {
         <div className="relative z-10 flex flex-1 items-center max-w-7xl mx-auto w-full px-6 md:px-12 gap-12 overflow-hidden">
           {/* LEFT — OptionWheel */}
           <div className="flex-1 flex flex-col" style={{ height: "100%" }}>
-            <p className="text-xs tracking-widest uppercase mb-4 pl-1 shrink-0" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "'Inter', sans-serif" }}>
+            <p
+              className="text-xs tracking-widest uppercase mb-4 pl-1 shrink-0"
+              style={{
+                color: "hsl(var(--muted-foreground))",
+                fontFamily: "var(--font-body)",
+              }}
+            >
               Sign up as
             </p>
             <div style={{ flex: 1, position: "relative" }}>
@@ -479,18 +533,18 @@ function SignUpForm() {
                   setWheelIndex(index);
                   setSelectedRole(roleOptions[index].id);
                 }}
-                textColor="rgba(255,255,255,0.25)"
-                activeColor="#ffffff"
+                textColor="hsl(var(--muted-foreground))"
+                activeColor="hsl(var(--foreground))"
                 side="left"
-                fontSize={3}
+                fontSize={2.6}
                 spacing={1.4}
                 curve={1}
                 tilt={6}
-                blur={2}
+                blur={0}
                 fade={0.25}
-                minOpacity={0.04}
+                minOpacity={0.4}
                 smoothing={200}
-                inset={80}
+                inset={24}
                 loop={false}
                 draggable
               />
@@ -499,46 +553,68 @@ function SignUpForm() {
 
           {/* RIGHT — detail card */}
           <div
-            className="hidden md:flex flex-col justify-between rounded-3xl p-8 w-[400px] shrink-0 transition-all duration-500"
+            className="role-detail hidden md:flex flex-col justify-between rounded-3xl p-8 w-[400px] shrink-0 transition-all duration-500"
             style={{
-              background: "rgba(255,255,255,0.04)",
+              background: "var(--material-card)",
               backdropFilter: "blur(20px)",
               WebkitBackdropFilter: "blur(20px)",
-              border: `1px solid ${accent}40`,
-              boxShadow: `0 0 60px ${accent}18`,
+              border: "1px solid var(--material-stroke)",
+              boxShadow: "var(--material-highlight),var(--material-shadow)",
               minHeight: 380,
             }}
           >
             <div>
               <div
                 className="h-14 w-14 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-500"
-                style={{ background: `${accent}20`, border: `1px solid ${accent}40` }}
+                style={{
+                  background: `${accent}20`,
+                  border: `1px solid ${accent}40`,
+                }}
               >
                 <Icon size={26} strokeWidth={1.4} style={{ color: accent }} />
               </div>
 
               <span
                 className="text-xs font-semibold px-2.5 py-1 rounded-full mb-3 inline-block transition-colors duration-500"
-                style={{ background: `${accent}18`, color: accent, border: `1px solid ${accent}35` }}
+                style={{
+                  background: `${accent}18`,
+                  color: accent,
+                  border: `1px solid ${accent}35`,
+                }}
               >
                 {subtitle}
               </span>
 
               <h2
                 className="text-3xl font-normal mb-3 mt-2 transition-all duration-300"
-                style={{ fontFamily: "'Instrument Serif', serif", color: "#fff" }}
+                style={{
+                  fontFamily: "var(--font-display)",
+                  color: "hsl(var(--foreground))",
+                }}
               >
                 {activeRole.label}
               </h2>
 
-              <p className="text-sm leading-relaxed mb-7" style={{ color: "rgba(255,255,255,0.55)" }}>
+              <p
+                className="text-sm leading-relaxed mb-7"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
                 {desc}
               </p>
 
               <div className="space-y-3">
                 {features.map((feat, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>
-                    <ShieldCheck size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: accent }} />
+                  <div
+                    key={i}
+                    className="flex items-start gap-2.5 text-sm"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    <ShieldCheck
+                      size={14}
+                      strokeWidth={1.5}
+                      className="mt-0.5 shrink-0"
+                      style={{ color: accent }}
+                    />
                     {feat}
                   </div>
                 ))}
@@ -548,7 +624,11 @@ function SignUpForm() {
             <button
               onClick={() => handleRoleSelect(activeRole.id)}
               className="mt-8 w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] cursor-pointer"
-              style={{ background: accent, color: "#fff", boxShadow: `0 0 30px ${accent}55` }}
+              style={{
+                background: "hsl(var(--primary))",
+                color: "hsl(var(--primary-foreground))",
+                boxShadow: "var(--material-shadow)",
+              }}
             >
               Continue as {activeRole.label}
               <ArrowRight size={16} strokeWidth={2} />
@@ -560,7 +640,10 @@ function SignUpForm() {
             <button
               onClick={() => handleRoleSelect(activeRole.id)}
               className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold transition-all duration-200 cursor-pointer"
-              style={{ background: accent, color: "#fff" }}
+              style={{
+                background: "hsl(var(--primary))",
+                color: "hsl(var(--primary-foreground))",
+              }}
             >
               Continue as {activeRole.label}
               <ArrowRight size={16} strokeWidth={2} />
@@ -568,7 +651,10 @@ function SignUpForm() {
           </div>
         </div>
 
-        <p className="relative z-10 text-center text-xs pb-6" style={{ color: "rgba(255,255,255,0.2)" }}>
+        <p
+          className="relative z-10 text-center text-xs pb-6"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
           Scroll · Drag · Arrow keys to navigate
         </p>
       </div>
@@ -602,7 +688,7 @@ function SignUpForm() {
                 <div
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow-xs",
-                    currentRoleInfo.gradient
+                    currentRoleInfo.gradient,
                   )}
                 >
                   <currentRoleInfo.icon className="h-4 w-4" />
@@ -611,7 +697,9 @@ function SignUpForm() {
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
                     Signing up as
                   </p>
-                  <p className="text-xs font-bold text-foreground">{currentRoleInfo.label}</p>
+                  <p className="text-xs font-bold text-foreground">
+                    {currentRoleInfo.label}
+                  </p>
                 </div>
               </div>
               {step === 2 && (
@@ -656,7 +744,9 @@ function SignUpForm() {
           {/* ── STEP 2: Details form ─────────────────────────────────── */}
           {step === 2 && (
             <>
-              <h1 className="font-display text-2xl font-bold mb-1">Create your account</h1>
+              <h1 className="font-display text-2xl font-bold mb-1">
+                Create your account
+              </h1>
               <p className="text-muted-foreground text-sm mb-5">
                 {currentRoleInfo
                   ? `Set up your ${currentRoleInfo.label} workspace on Origin Point.`
@@ -670,10 +760,16 @@ function SignUpForm() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit(onSubmitDetails)} noValidate className="space-y-3">
+              <form
+                onSubmit={handleSubmit(onSubmitDetails)}
+                noValidate
+                className="space-y-3"
+              >
                 {/* Name */}
                 <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="signup-name">Full Name</label>
+                  <label className="text-sm font-medium" htmlFor="signup-name">
+                    Full Name
+                  </label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -683,12 +779,18 @@ function SignUpForm() {
                       {...register("name")}
                     />
                   </div>
-                  {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+                  {errors.name && (
+                    <p className="text-xs text-destructive">
+                      {errors.name.message}
+                    </p>
+                  )}
                 </div>
 
                 {/* Email */}
                 <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="signup-email">Email</label>
+                  <label className="text-sm font-medium" htmlFor="signup-email">
+                    Email
+                  </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -701,7 +803,11 @@ function SignUpForm() {
                       {...register("email")}
                     />
                   </div>
-                  {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                  {errors.email && (
+                    <p className="text-xs text-destructive">
+                      {errors.email.message}
+                    </p>
+                  )}
                 </div>
 
                 <Button
@@ -729,7 +835,9 @@ function SignUpForm() {
                   <div className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-3 text-muted-foreground">or continue with</span>
+                  <span className="bg-background px-3 text-muted-foreground">
+                    or continue with
+                  </span>
                 </div>
               </div>
 
@@ -750,7 +858,10 @@ function SignUpForm() {
 
               <p className="mt-4 text-center text-sm text-muted-foreground">
                 Already have an account?{" "}
-                <Link href="/login" className="font-medium text-foreground hover:underline">
+                <Link
+                  href="/login"
+                  className="font-medium text-foreground hover:underline"
+                >
                   Log In
                 </Link>
               </p>
@@ -762,18 +873,27 @@ function SignUpForm() {
             <>
               <button
                 type="button"
-                onClick={() => { setStep(2); setOtp(""); setOtpError(""); setNotice({ type: "", msg: "" }); }}
+                onClick={() => {
+                  setStep(2);
+                  setOtp("");
+                  setOtpError("");
+                  setNotice({ type: "", msg: "" });
+                }}
                 className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
 
-              <h1 className="font-display text-2xl font-bold mb-1">Verify your email</h1>
+              <h1 className="font-display text-2xl font-bold mb-1">
+                Verify your email
+              </h1>
               <p className="text-muted-foreground text-sm mb-1">
                 We sent a 6-digit code to
               </p>
-              <p className="font-semibold text-foreground text-sm mb-7">{pendingEmail}</p>
+              <p className="font-semibold text-foreground text-sm mb-7">
+                {pendingEmail}
+              </p>
 
               <form onSubmit={handleVerifyOtp} noValidate className="space-y-6">
                 <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
@@ -790,7 +910,9 @@ function SignUpForm() {
 
                 <Button
                   type="submit"
-                  disabled={isLoading || otp.replace(/\D/g, "").length < OTP_LENGTH}
+                  disabled={
+                    isLoading || otp.replace(/\D/g, "").length < OTP_LENGTH
+                  }
                   className="auth-card-submit w-full h-11"
                 >
                   {isLoading ? (
@@ -849,12 +971,19 @@ function SignUpForm() {
                 </span>
               </div>
 
-              <h1 className="font-display text-2xl font-bold mb-1">Create your password</h1>
+              <h1 className="font-display text-2xl font-bold mb-1">
+                Create your password
+              </h1>
               <p className="text-muted-foreground text-sm mb-6">
-                Set a password so you can sign in directly anytime without needing an email code.
+                Set a password so you can sign in directly anytime without
+                needing an email code.
               </p>
 
-              <form onSubmit={handleSetPassword} noValidate className="space-y-4">
+              <form
+                onSubmit={handleSetPassword}
+                noValidate
+                className="space-y-4"
+              >
                 <div className="space-y-1">
                   <label className="text-sm font-medium">New Password</label>
                   <div className="relative">
@@ -872,13 +1001,19 @@ function SignUpForm() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">Confirm Password</label>
+                  <label className="text-sm font-medium">
+                    Confirm Password
+                  </label>
                   <div className="relative">
                     <Input
                       type={showConfirmPassword ? "text" : "password"}
@@ -891,10 +1026,16 @@ function SignUpForm() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                     >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>

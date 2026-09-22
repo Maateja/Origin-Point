@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useLearningPrograms } from "@/lib/learning-programs";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -86,6 +87,7 @@ export function OpportunityWorkspace({
   title?: string;
 }) {
   const state = usePlatformData();
+  const programs = useLearningPrograms();
   const assessments = useIndustryAssessments();
   const data = state.data;
   const action = useAction();
@@ -180,7 +182,8 @@ export function OpportunityWorkspace({
             summary:
               examSummary ||
               "Proctored competency assessment. Fullscreen and anti-cheating rules enforced.",
-            questions: examQuestions.length > 0 ? examQuestions : [blankQuestion()],
+            questions:
+              examQuestions.length > 0 ? examQuestions : [blankQuestion()],
             passingScore: examCutoff,
           }
         : undefined,
@@ -393,7 +396,8 @@ export function OpportunityWorkspace({
                               Pre-Screening Assessment Gate
                             </h4>
                             <p className="text-xs text-muted-foreground">
-                              Require applicants to pass a proctored safe exam before submitting their application.
+                              Require applicants to pass a proctored safe exam
+                              before submitting their application.
                             </p>
                           </div>
                         </div>
@@ -430,7 +434,9 @@ export function OpportunityWorkspace({
                                 max={100}
                                 className="field"
                                 value={examCutoff}
-                                onChange={(e) => setExamCutoff(Number(e.target.value))}
+                                onChange={(e) =>
+                                  setExamCutoff(Number(e.target.value))
+                                }
                                 required={requireExam}
                               />
                             </Field>
@@ -479,7 +485,8 @@ export function OpportunityWorkspace({
                                   </span>
                                 </span>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  Click the letter badge next to an option to mark it as the verified correct answer.
+                                  Click the letter badge next to an option to
+                                  mark it as the verified correct answer.
                                 </p>
                               </div>
                               <Button
@@ -494,7 +501,8 @@ export function OpportunityWorkspace({
                                 }
                                 className="text-xs h-8 cursor-pointer shrink-0"
                               >
-                                <Plus className="h-3.5 w-3.5 mr-1" /> Add Question
+                                <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                                Question
                               </Button>
                             </div>
 
@@ -570,9 +578,13 @@ export function OpportunityWorkspace({
                                         })
                                       }
                                     >
-                                      <option value="Technical">Technical</option>
+                                      <option value="Technical">
+                                        Technical
+                                      </option>
                                       <option value="Aptitude">Aptitude</option>
-                                      <option value="Soft skills">Soft skills</option>
+                                      <option value="Soft skills">
+                                        Soft skills
+                                      </option>
                                     </select>
                                   </Field>
                                 </div>
@@ -597,12 +609,14 @@ export function OpportunityWorkspace({
                                   <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
                                     <span>Answer Options</span>
                                     <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                                      Click the letter button next to the correct answer
+                                      Click the letter button next to the
+                                      correct answer
                                     </span>
                                   </div>
                                   <div className="grid gap-2.5 sm:grid-cols-2">
                                     {q.options.map((opt, oIdx) => {
-                                      const isCorrect = q.correctAnswer === oIdx;
+                                      const isCorrect =
+                                        q.correctAnswer === oIdx;
                                       return (
                                         <div
                                           key={oIdx}
@@ -772,14 +786,16 @@ export function OpportunityWorkspace({
                         <div className="mt-3 flex items-center gap-2">
                           <span
                             className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                              takenReport.scorePercent >= (o.assessmentCutoff ?? 70)
+                              takenReport.scorePercent >=
+                              (o.assessmentCutoff ?? 70)
                                 ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
                                 : "bg-red-500/15 text-red-500 border border-red-500/30"
                             }`}
                           >
                             <ClipboardCheck className="h-3.5 w-3.5" />
                             Your Screening Score: {takenReport.scorePercent}% (
-                            {takenReport.scorePercent >= (o.assessmentCutoff ?? 70)
+                            {takenReport.scorePercent >=
+                            (o.assessmentCutoff ?? 70)
                               ? "Target Met"
                               : "Below Target"}
                             )
@@ -901,7 +917,19 @@ export function OpportunityWorkspace({
                                   }
                                 />
                               </Button>
-                              {o.requiresAssessment && !applied && open && !takenReport ? (
+                              {programs.data?.programs.some(
+                                (p) => p.id === o.id,
+                              ) ? (
+                                <Link
+                                  className="text-sm font-semibold role-text"
+                                  href={`/${role}/programs?program=${o.id}`}
+                                >
+                                  View program & enroll →
+                                </Link>
+                              ) : o.requiresAssessment &&
+                                !applied &&
+                                open &&
+                                !takenReport ? (
                                 <Link
                                   href={
                                     linkedAssessment

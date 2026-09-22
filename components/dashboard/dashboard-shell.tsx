@@ -24,6 +24,9 @@ export function DashboardShell({
         data-role={role}
         className="dashboard-frame min-h-screen bg-background"
       >
+        <a href="#workspace-content" className="skip-navigation">
+          Skip to workspace
+        </a>
         {/* Sidebar (desktop) */}
         <Sidebar role={role} />
 
@@ -32,7 +35,11 @@ export function DashboardShell({
           className={cn("dashboard-content-shell flex min-h-screen flex-col")}
         >
           <TopBar role={role} title={title} />
-          <main className="dashboard-main mx-auto w-full max-w-[1600px] min-w-0 flex-1 p-4 pb-24 md:p-6 md:pb-8">
+          <main
+            id="workspace-content"
+            tabIndex={-1}
+            className="dashboard-main mx-auto w-full max-w-[1600px] min-w-0 flex-1 p-4 pb-24 md:p-6 md:pb-8"
+          >
             {children}
           </main>
         </div>

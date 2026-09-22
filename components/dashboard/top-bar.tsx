@@ -1,4 +1,5 @@
 "use client";
+import { NotificationBell } from "@/components/platform/notification-bell";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -45,6 +46,7 @@ export function TopBar({
         </p>
       </div>
       <div className="flex items-center gap-3">
+        <NotificationBell role={role} />
         <ThemeToggle className="" />
         <Link
           href={"/" + role + "/profile"}

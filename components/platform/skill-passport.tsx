@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import { type PlatformData } from "@/lib/platform-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tag } from "./primitives";
+import { ReviewedExperiences } from "./internship-reports";
 export function SkillPassport({
   data,
   userId = data.profile.id,
@@ -14,26 +15,46 @@ export function SkillPassport({
   const evidence = data.evidence
     .filter((e) => e.user_id === userId)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  if (!evidence.length)
-    return (
-      <p className="rounded-2xl border border-dashed border-border p-5 text-sm leading-6 text-muted-foreground">
-        No industry assessment evidence recorded yet. Uploaded credentials and
-        declared skills do not automatically become verified skills.
-      </p>
-    );
+  const declared = data.records.filter(
+    (r) => r.user_id === userId && r.kind === "skill",
+  );
   return (
     <section className="space-y-4">
+      <ReviewedExperiences userId={userId} />
+      {!!declared.length && (
+        <div className="glass-panel rounded-2xl p-5">
+          <h2 className="font-semibold">Declared skills</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Proficiency is self-declared. Assessment results are listed
+            separately below.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {declared.map((r) => (
+              <Tag key={r.id}>
+                {r.title}
+                {r.proficiency ? " · " + r.proficiency : ""}
+              </Tag>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
           <ShieldCheck className="h-5 w-5 role-text" />
           Assessment evidence
         </h2>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
-          Traceable scores from industry-authored, unproctored assessments. Not
-          independent certification. Earlier results remain visible; readiness
-          uses the latest evidence for each skill.
+          Traceable scores from industry-authored assessments. Browser
+          monitoring is not independent certification. Earlier results remain
+          visible; readiness uses the latest evidence for each skill.
         </p>
       </div>
+      {!evidence.length && (
+        <p className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+          No industry assessment evidence recorded yet. Uploaded credentials and
+          declared skills do not automatically become verified skills.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {evidence.map((e) => (
           <Card key={e.id}>

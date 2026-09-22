@@ -1,11 +1,18 @@
 "use client";
 import Link from "next/link";
+import { StudentSetupChecklist } from "@/components/platform/student-foundation";
 import {
   ArrowRight,
   ArrowUpRight,
   Briefcase,
   CheckCircle2,
   Target,
+  GraduationCap,
+  FileText,
+  ShieldCheck,
+  ChartColumn,
+  Flag,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,8 +105,7 @@ export function RoleOverview({ role = "student" }) {
           [
             "Pending requests",
             (data?.memberships ?? []).filter(
-              (m) =>
-                m.institution_id === profileId && m.status === "Pending",
+              (m) => m.institution_id === profileId && m.status === "Pending",
             ).length,
           ],
           [
@@ -186,14 +192,29 @@ export function RoleOverview({ role = "student" }) {
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(([label, value]) => (
-          <Metric key={label} label={label} value={value} />
-        ))}
+        {metrics.map(([label, value], index) => {
+          const Icon = [GraduationCap, FileText, ShieldCheck, ChartColumn][
+            index
+          ];
+          return (
+            <Metric
+              key={label}
+              label={label}
+              value={value}
+              icon={<Icon className="h-6 w-6" />}
+            />
+          );
+        })}
       </div>
+      {role === "student" && <StudentSetupChecklist data={data} />}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,.7fr)]">
         <Card>
           <CardHeader>
             <CardTitle>
+              <Target
+                aria-hidden="true"
+                className="mr-3 inline-block h-6 w-6 text-muted-foreground"
+              />
               {["student", "academician"].includes(role)
                 ? "Opportunities for you"
                 : "Recent activity"}
@@ -225,9 +246,15 @@ export function RoleOverview({ role = "student" }) {
                               ? "/academician/consultancy"
                               : "/academician/internships"
                     }
-                    className="flex items-center justify-between gap-4 rounded-2xl border border-border p-4 transition hover:bg-muted/40"
+                    className="glass-row flex items-center justify-between gap-4 rounded-2xl p-4"
                   >
-                    <div>
+                    <div
+                      className="glass-icon-tile hidden sm:flex"
+                      aria-hidden="true"
+                    >
+                      <Briefcase className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-semibold">{o.title}</h3>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {o.company} · {o.location}
@@ -239,12 +266,16 @@ export function RoleOverview({ role = "student" }) {
                     <span className="text-sm font-bold role-text">
                       {getMatchScore(o.skills, skills)}%
                     </span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                    />
                   </Link>
                 ))
               : data.applications.slice(0, 4).map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center justify-between gap-4 rounded-2xl border border-border p-4"
+                    className="glass-row flex items-center justify-between gap-4 rounded-2xl p-4"
                   >
                     <div>
                       <p className="text-sm font-semibold">{a.studentName}</p>
@@ -271,7 +302,13 @@ export function RoleOverview({ role = "student" }) {
         </Card>
         <Card className="role-gradient-subtle">
           <CardHeader>
-            <CardTitle>Your next steps</CardTitle>
+            <CardTitle>
+              <Flag
+                aria-hidden="true"
+                className="mr-3 inline-block h-6 w-6 text-muted-foreground"
+              />
+              Your next steps
+            </CardTitle>
             <CardDescription>A few useful places to begin.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -279,7 +316,7 @@ export function RoleOverview({ role = "student" }) {
               <Link
                 href={s.href}
                 key={s.title}
-                className="flex gap-3 rounded-2xl bg-background/70 p-4 transition hover:bg-background"
+                className="glass-row flex items-start gap-3 rounded-2xl p-4"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full role-bg-soft text-xs font-bold role-text">
                   {i + 1}
@@ -290,6 +327,10 @@ export function RoleOverview({ role = "student" }) {
                     {s.description}
                   </p>
                 </div>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="ml-auto mt-1 h-4 w-4 shrink-0 text-muted-foreground"
+                />
               </Link>
             ))}
           </CardContent>

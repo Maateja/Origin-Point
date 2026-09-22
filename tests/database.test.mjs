@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createTestDatabase } from "./database-fixture.mjs";
+import {
+  createTestDatabase,
+  completeTestInternship,
+} from "./database-fixture.mjs";
 
 test("migration, account isolation, applications, documents and assessment integrity", async () => {
   const db = await createTestDatabase();
@@ -164,8 +167,21 @@ test("migration, account isolation, applications, documents and assessment integ
       "Interview Scheduled",
       "Offered",
       "Completed",
-    ])
-      await db.query("update applications set status=$1", [stage]);
+    ]) {
+      if (stage === "Completed") await completeTestInternship(db, application);
+      else await db.query("update applications set status=$1", [stage]);
+      if (stage === "Offered") {
+        await db.query(
+          "select configure_internship($1,current_date,current_date+30)",
+          [application],
+        );
+        await as(student);
+        await db.query("select respond_internship_offer($1,'Accepted')", [
+          application,
+        ]);
+        await as(industry);
+      }
+    }
     await as(student);
     await db.query(
       "insert into institution_memberships(institution_id) values($1)",

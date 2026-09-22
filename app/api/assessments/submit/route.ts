@@ -14,6 +14,17 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   try {
+    const { data: version, error: versionError } = await db.rpc(
+      "skill_taxonomy_version",
+    );
+    if (versionError || version !== 1)
+      return NextResponse.json(
+        {
+          error:
+            "Assessment scoring needs the skill-taxonomy database update. Your answers have not been submitted; please retry after setup.",
+        },
+        { status: 503 },
+      );
     const body = z
       .object({
         attemptId: z.string().uuid(),

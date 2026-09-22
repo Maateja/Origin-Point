@@ -46,9 +46,138 @@ export async function createTestDatabase() {
         "utf8",
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220001_student_foundation.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220002_skill_taxonomy.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220003_learning_goals.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220004_application_tracking.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220005_internship_supervision.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220006_internship_reports.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220007_completion_certificates.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220008_learning_programs.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220009_recruitment_workflow.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220010_notifications.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          "../supabase/migrations/202609220011_collaboration_workspaces.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     return db;
   } catch (error) {
     await db.close();
     throw error;
   }
+}
+
+// Disposable database helper; caller is the opportunity owner.
+export async function completeTestInternship(db, app) {
+  const owner = (await db.query("select auth.uid() id")).rows[0].id;
+  const student = (
+    await db.query("select applicant_id from applications where id=$1", [app])
+  ).rows[0].applicant_id;
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)", [
+    student,
+  ]);
+  const path = `${student}/${app}/${crypto.randomUUID()}.pdf`;
+  await db.query(
+    "insert into storage.objects(bucket_id,name) values('internship-reports',$1)",
+    [path],
+  );
+  const report = (
+    await db.query(
+      "select submit_internship_report($1,'Final','Final work','Completed and documented project work',$2) id",
+      [app, path],
+    )
+  ).rows[0].id;
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)", [
+    owner,
+  ]);
+  await db.query(
+    "select review_internship_report($1,'Approved','Reviewed the final project deliverables')",
+    [report],
+  );
+  await db.query("select complete_reviewed_internship($1)", [app]);
 }

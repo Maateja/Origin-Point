@@ -20,7 +20,7 @@ export function MobileBottomNav({ role = "student" }) {
   return (
     <nav
       aria-label="Mobile workspace navigation"
-      className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl md:hidden safe-area-inset-bottom"
+      className="mobile-glass-nav fixed z-50 md:hidden"
     >
       {open && (
         <div

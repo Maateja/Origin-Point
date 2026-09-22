@@ -1,6 +1,15 @@
 "use client";
+import { RecruitmentPanel } from "./recruitment";
 import { useState } from "react";
-import { Download, MessageSquare, Search, Users, ClipboardCheck, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Download,
+  MessageSquare,
+  Search,
+  Users,
+  ClipboardCheck,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +23,8 @@ import {
   type Role,
 } from "@/lib/platform-store";
 import { SkillPassport } from "./skill-passport";
+import { ApplicationTimeline, InternshipPanel } from "./application-tracking";
+import { CareerPreferenceSummary } from "./student-foundation";
 import { DocumentLink } from "./document-link";
 import {
   DataState,
@@ -91,19 +102,16 @@ export function ApplicationsWorkspace({
                     className="role-gradient border-0 text-white cursor-pointer shadow-sm hover:scale-[1.02] transition-transform"
                     disabled={action.busy}
                     onClick={async () => {
-                      await action.run(
-                        async () => {
-                          const ownOpps = (data?.opportunities ?? []).filter(
-                            (o) => o.ownerId === data?.profile?.id,
-                          );
-                          let count = 0;
-                          for (const opp of ownOpps) {
-                            count += await autoShortlistCandidates(opp.id);
-                          }
-                          return count;
-                        },
-                        "Shortlisted candidates with passing screening scores and clean proctoring.",
-                      );
+                      await action.run(async () => {
+                        const ownOpps = (data?.opportunities ?? []).filter(
+                          (o) => o.ownerId === data?.profile?.id,
+                        );
+                        let count = 0;
+                        for (const opp of ownOpps) {
+                          count += await autoShortlistCandidates(opp.id);
+                        }
+                        return count;
+                      }, "Shortlisted candidates with passing screening scores and clean proctoring.");
                     }}
                   >
                     <Sparkles className="mr-1.5 h-4 w-4 text-amber-300" />
@@ -208,34 +216,41 @@ export function ApplicationsWorkspace({
                           <div className="rounded-xl role-bg-soft px-3 py-1.5 text-xs font-semibold role-text">
                             {a.matchScore}% skill overlap
                           </div>
-                          {a.assessmentScore !== undefined && a.assessmentScore !== null && (
-                            <div className="flex flex-wrap items-center justify-end gap-1.5">
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                  a.assessmentPassed
-                                    ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
-                                    : "bg-red-500/15 text-red-500 border border-red-500/30"
-                                }`}
-                              >
-                                <ClipboardCheck className="h-3 w-3" />
-                                Exam: {a.assessmentScore}% ({a.assessmentPassed ? "Passed" : "Below Cutoff"})
-                              </span>
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                  a.proctoringTrust === "Verified"
-                                    ? "bg-blue-500/15 text-blue-500 border border-blue-500/30"
-                                    : "bg-amber-500/15 text-amber-500 border border-amber-500/30"
-                                }`}
-                              >
-                                <ShieldCheck className="h-3 w-3" />
-                                {a.proctoringTrust} ({a.proctoringViolations ?? 0} warnings)
-                              </span>
-                            </div>
-                          )}
+                          {a.assessmentScore !== undefined &&
+                            a.assessmentScore !== null && (
+                              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                <span
+                                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                                    a.assessmentPassed
+                                      ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30"
+                                      : "bg-red-500/15 text-red-500 border border-red-500/30"
+                                  }`}
+                                >
+                                  <ClipboardCheck className="h-3 w-3" />
+                                  Exam: {a.assessmentScore}% (
+                                  {a.assessmentPassed
+                                    ? "Passed"
+                                    : "Below Cutoff"}
+                                  )
+                                </span>
+                                <span
+                                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                    a.proctoringTrust === "Verified"
+                                      ? "bg-blue-500/15 text-blue-500 border border-blue-500/30"
+                                      : "bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                                  }`}
+                                >
+                                  <ShieldCheck className="h-3 w-3" />
+                                  {a.proctoringTrust} (
+                                  {a.proctoringViolations ?? 0} warnings)
+                                </span>
+                              </div>
+                            )}
                         </div>
                       </div>
                       {recruiter && (
                         <div className="mt-4 space-y-3">
+                          <CareerPreferenceSummary profile={person} />
                           <p className="text-sm text-muted-foreground">
                             {person?.program}
                             {person?.organization
@@ -251,8 +266,9 @@ export function ApplicationsWorkspace({
                             <summary className="cursor-pointer font-medium">
                               Applicant portfolio (
                               {
-                                (evidence ?? []).filter((r) => r.kind !== "skill")
-                                  .length
+                                (evidence ?? []).filter(
+                                  (r) => r.kind !== "skill",
+                                ).length
                               }{" "}
                               records)
                             </summary>
@@ -277,6 +293,22 @@ export function ApplicationsWorkspace({
                                     <p className="mt-1 text-xs text-muted-foreground">
                                       {r.organization} {r.description}
                                     </p>
+                                    {r.contribution && (
+                                      <p className="mt-2 text-xs">
+                                        Contribution: {r.contribution}
+                                      </p>
+                                    )}
+                                    {r.credential_id && (
+                                      <p className="mt-2 text-xs">
+                                        Credential ID: {r.credential_id}
+                                      </p>
+                                    )}
+                                    {!!r.associated_skills?.length && (
+                                      <p className="mt-2 text-xs">
+                                        Related skills:{" "}
+                                        {r.associated_skills.join(", ")}
+                                      </p>
+                                    )}
                                     {r.url && (
                                       <a
                                         href={r.url}
@@ -324,8 +356,58 @@ export function ApplicationsWorkspace({
                         </div>
                       </div>
                       {recruiter && (
-                        <ApplicationEditor key={a.updatedAt} application={a} />
+                        <ApplicationEditor
+                          key={a.updatedAt}
+                          application={a}
+                          internship={
+                            !!o &&
+                            [
+                              "Internship",
+                              "Apprenticeship",
+                              "Live Project",
+                              "Faculty Internship",
+                              "Job",
+                            ].includes(o.type)
+                          }
+                        />
                       )}
+                      <ApplicationTimeline applicationId={a.id} />
+                      {o && (
+                        <details className="mt-4 rounded-2xl border border-border p-4">
+                          <summary className="cursor-pointer text-sm font-semibold">
+                            Interviews & placement offers
+                          </summary>
+                          <div className="mt-4">
+                            <RecruitmentPanel
+                              application={a}
+                              isJob={o.type === "Job"}
+                              owner={o.ownerId === data.profile.id}
+                              applicant={a.applicantId === data.profile.id}
+                            />
+                          </div>
+                        </details>
+                      )}
+                      {o &&
+                        [
+                          "Internship",
+                          "Apprenticeship",
+                          "Live Project",
+                          "Faculty Internship",
+                        ].includes(o.type) &&
+                        ["Offered", "Completed"].includes(a.status) && (
+                          <details className="mt-4 rounded-2xl border border-border p-4">
+                            <summary className="cursor-pointer text-sm font-semibold">
+                              Internship reports, milestones & completion
+                            </summary>
+                            <div className="mt-4">
+                              <InternshipPanel
+                                application={a}
+                                canManage={o.ownerId === data.profile.id}
+                                canSubmit={a.applicantId === data.profile.id}
+                              />
+                            </div>
+                          </details>
+                        )}
                     </CardContent>
                   </Card>
                 );
@@ -351,7 +433,13 @@ export function ApplicationsWorkspace({
     </DashboardShell>
   );
 }
-function ApplicationEditor({ application: a }: { application: Application }) {
+function ApplicationEditor({
+  application: a,
+  internship,
+}: {
+  application: Application;
+  internship: boolean;
+}) {
   const action = useAction();
   return (
     <details className="mt-5 border-t border-border pt-4">
@@ -380,7 +468,12 @@ function ApplicationEditor({ application: a }: { application: Application }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Stage">
             <select name="status" defaultValue={a.status} className="field">
-              {[a.status, ...nextStatuses[a.status]].map((s) => (
+              {[
+                a.status,
+                ...nextStatuses[a.status].filter(
+                  (s) => !internship || s !== "Completed",
+                ),
+              ].map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
@@ -396,6 +489,12 @@ function ApplicationEditor({ application: a }: { application: Application }) {
             />
           </Field>
         </div>
+        {internship && a.status === "Offered" && (
+          <p className="text-xs text-muted-foreground">
+            Use the dedicated completion workflow: approved reports for
+            internships, or two-party joining confirmation for jobs.
+          </p>
+        )}
         <Field label="Next step / interview instructions">
           <input
             name="nextStep"

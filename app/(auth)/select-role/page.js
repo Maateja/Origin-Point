@@ -30,7 +30,7 @@ const roleOptions = [
     ],
     Icon: GraduationCap,
     icon: GraduationCap,
-    accent: "#6366f1",        // indigo
+    accent: "#6366f1", // indigo
     redirect: "/student",
   },
   {
@@ -45,7 +45,7 @@ const roleOptions = [
     ],
     Icon: Building2,
     icon: Building2,
-    accent: "#f59e0b",        // amber
+    accent: "#f59e0b", // amber
     redirect: "/industry",
   },
   {
@@ -60,7 +60,7 @@ const roleOptions = [
     ],
     Icon: BookOpen,
     icon: BookOpen,
-    accent: "#10b981",        // emerald
+    accent: "#10b981", // emerald
     redirect: "/academician",
   },
   {
@@ -75,7 +75,7 @@ const roleOptions = [
     ],
     Icon: Landmark,
     icon: Landmark,
-    accent: "#3b82f6",        // blue
+    accent: "#3b82f6", // blue
     redirect: "/institution",
   },
 ];
@@ -100,7 +100,9 @@ function SelectRoleContent() {
   useEffect(() => {
     async function loadUser() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (user) {
           setCurrentUser(user);
           const { data: profile } = await supabase
@@ -148,7 +150,9 @@ function SelectRoleContent() {
       }
       router.push(activeRole.redirect || `/${roleId}`);
     } catch (err) {
-      setSaveError(err.message || "Your role could not be saved. Please retry.");
+      setSaveError(
+        err.message || "Your role could not be saved. Please retry.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -161,13 +165,18 @@ function SelectRoleContent() {
   };
 
   const Icon = activeRole?.Icon || activeRole?.icon || GraduationCap;
-  const { accent = "#6366f1", subtitle = "", desc = "", features = [] } = activeRole || {};
+  const {
+    accent = "#6366f1",
+    subtitle = "",
+    desc = "",
+    features = [],
+  } = activeRole || {};
 
   return (
     /* Full-screen dark cinematic shell matching the landing page */
     <div
-      className="min-h-screen w-full flex flex-col overflow-hidden"
-      style={{ background: "hsl(201,100%,8%)", fontFamily: "'Inter', sans-serif", color: "#fff" }}
+      className="auth-role-shell min-h-screen w-full flex flex-col overflow-hidden"
+      style={{ fontFamily: "var(--font-body)" }}
     >
       {/* ── Subtle animated gradient blob that follows the accent colour ── */}
       <div
@@ -181,16 +190,17 @@ function SelectRoleContent() {
       <nav className="relative z-10 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto w-full">
         <Link
           href="/"
-          className="text-2xl tracking-tight text-white leading-none select-none"
-          style={{ fontFamily: "'Instrument Serif', serif" }}
+          className="text-2xl font-semibold tracking-tight text-foreground leading-none select-none"
+          style={{ fontFamily: "var(--font-display)" }}
         >
-          Origin Point<sup className="text-xs text-white/50 ml-0.5">®</sup>
+          Origin Point
+          <sup className="text-xs text-muted-foreground ml-0.5">®</sup>
         </Link>
 
         {currentUser ? (
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <LogOut size={15} strokeWidth={1.5} />
             Sign Out
@@ -198,7 +208,7 @@ function SelectRoleContent() {
         ) : (
           <Link
             href="/login"
-            className="text-sm text-white/50 hover:text-white transition-colors"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Log In
           </Link>
@@ -208,11 +218,20 @@ function SelectRoleContent() {
       {/* ── Error banner ── */}
       {errorMessage && (
         <div className="relative z-10 mx-auto max-w-xl w-full px-6 mt-2">
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm"
-            style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5" }}>
+          <div
+            className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm"
+            style={{
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              color: "#fca5a5",
+            }}
+          >
             <AlertCircle size={16} className="shrink-0" />
             <span>{decodeURIComponent(errorMessage)}</span>
-            <Link href="/login" className="ml-auto text-xs underline opacity-80 hover:opacity-100 shrink-0">
+            <Link
+              href="/login"
+              className="ml-auto text-xs underline opacity-80 hover:opacity-100 shrink-0"
+            >
               Back to Login
             </Link>
           </div>
@@ -221,12 +240,16 @@ function SelectRoleContent() {
 
       {/* ── Two-column layout ── */}
       <div className="relative z-10 flex flex-1 items-center max-w-7xl mx-auto w-full px-6 md:px-12 py-10 gap-12">
-
         {/* LEFT — OptionWheel */}
-        <div className="flex-1 flex flex-col justify-center" style={{ minHeight: 420 }}>
+        <div
+          className="flex-1 flex flex-col justify-center"
+          style={{ minHeight: 420 }}
+        >
           {/* Tiny heading above the wheel */}
-          <p className="text-xs tracking-widest uppercase text-white/35 mb-6 pl-1"
-            style={{ fontFamily: "'Inter', sans-serif" }}>
+          <p
+            className="text-xs tracking-widest uppercase text-muted-foreground mb-6 pl-1"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
             {isSignupIntent ? "Sign up as" : "Enter as"}
           </p>
 
@@ -234,16 +257,16 @@ function SelectRoleContent() {
             items={WHEEL_LABELS}
             defaultSelected={selectedIndex}
             onChange={handleWheelChange}
-            textColor="rgba(255,255,255,0.28)"
-            activeColor="#ffffff"
+            textColor="hsl(var(--muted-foreground))"
+            activeColor="hsl(var(--foreground))"
             side="left"
-            fontSize={3.8}
+            fontSize={2.6}
             spacing={1.35}
             curve={1}
             tilt={7}
-            blur={2.5}
+            blur={0}
             fade={0.3}
-            minOpacity={0.04}
+            minOpacity={0.4}
             smoothing={180}
             inset={4}
             loop={false}
@@ -253,13 +276,13 @@ function SelectRoleContent() {
 
         {/* RIGHT — Role detail card */}
         <div
-          className="hidden md:flex flex-col justify-between rounded-3xl p-8 w-[400px] shrink-0 transition-all duration-500"
+          className="role-detail hidden md:flex flex-col justify-between rounded-3xl p-8 w-[400px] shrink-0 transition-all duration-500"
           style={{
-            background: "rgba(255,255,255,0.04)",
+            background: "var(--material-card)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             border: `1px solid ${accent}40`,
-            boxShadow: `0 0 60px ${accent}18`,
+            boxShadow: "var(--material-shadow)",
             minHeight: 380,
           }}
         >
@@ -267,34 +290,56 @@ function SelectRoleContent() {
           <div>
             <div
               className="h-14 w-14 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-500"
-              style={{ background: `${accent}20`, border: `1px solid ${accent}40` }}
+              style={{
+                background: `${accent}20`,
+                border: `1px solid ${accent}40`,
+              }}
             >
               <Icon size={26} strokeWidth={1.4} style={{ color: accent }} />
             </div>
 
             <span
               className="text-xs font-semibold px-2.5 py-1 rounded-full mb-3 inline-block transition-colors duration-500"
-              style={{ background: `${accent}18`, color: accent, border: `1px solid ${accent}35` }}
+              style={{
+                background: `${accent}18`,
+                color: accent,
+                border: `1px solid ${accent}35`,
+              }}
             >
               {subtitle}
             </span>
 
             <h2
               className="text-3xl font-normal mb-3 transition-all duration-300"
-              style={{ fontFamily: "'Instrument Serif', serif", color: "#fff" }}
+              style={{
+                fontFamily: "var(--font-display)",
+                color: "hsl(var(--foreground))",
+              }}
             >
               {activeRole.label}
             </h2>
 
-            <p className="text-sm leading-relaxed mb-7" style={{ color: "rgba(255,255,255,0.55)" }}>
+            <p
+              className="text-sm leading-relaxed mb-7"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
               {desc}
             </p>
 
             {/* Feature list */}
             <div className="space-y-3">
               {features.map((feat, i) => (
-                <div key={i} className="flex items-start gap-2.5 text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>
-                  <ShieldCheck size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: accent }} />
+                <div
+                  key={i}
+                  className="flex items-start gap-2.5 text-sm"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  <ShieldCheck
+                    size={14}
+                    strokeWidth={1.5}
+                    className="mt-0.5 shrink-0"
+                    style={{ color: accent }}
+                  />
                   {feat}
                 </div>
               ))}
@@ -309,10 +354,14 @@ function SelectRoleContent() {
             style={{
               background: accent,
               color: "#fff",
-              boxShadow: `0 0 30px ${accent}55`,
+              boxShadow: "var(--material-shadow)",
             }}
           >
-            {isSubmitting ? "Redirecting…" : isSignupIntent ? `Sign Up as ${activeRole.label}` : `Enter as ${activeRole.label}`}
+            {isSubmitting
+              ? "Redirecting…"
+              : isSignupIntent
+                ? `Sign Up as ${activeRole.label}`
+                : `Enter as ${activeRole.label}`}
             <ArrowRight size={16} strokeWidth={2} />
           </button>
         </div>
@@ -323,7 +372,10 @@ function SelectRoleContent() {
             onClick={handleConfirm}
             disabled={isSubmitting || isLoadingUser}
             className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.01] disabled:opacity-50 cursor-pointer"
-            style={{ background: accent, color: "#fff" }}
+            style={{
+              background: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+            }}
           >
             {isSubmitting ? "Redirecting…" : `Continue as ${activeRole.label}`}
             <ArrowRight size={16} strokeWidth={2} />
@@ -332,7 +384,10 @@ function SelectRoleContent() {
       </div>
 
       {/* Bottom hint */}
-      <p className="relative z-10 text-center text-xs pb-6" style={{ color: "rgba(255,255,255,0.2)" }}>
+      <p
+        className="relative z-10 text-center text-xs pb-6"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
         Scroll · Drag · Arrow keys to navigate
       </p>
     </div>
@@ -341,11 +396,16 @@ function SelectRoleContent() {
 
 export default function SelectRolePage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(201,100%,8%)", color: "#fff" }}>
-        Loading…
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: "hsl(201,100%,8%)", color: "#fff" }}
+        >
+          Loading…
+        </div>
+      }
+    >
       <SelectRoleContent />
     </Suspense>
   );

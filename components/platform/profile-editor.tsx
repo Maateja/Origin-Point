@@ -29,6 +29,8 @@ import {
   useAction,
 } from "./primitives";
 import { RecordManager } from "./record-manager";
+import { SkillSuggestions } from "./skill-suggestions";
+import { CareerPreferences, StudentSetupChecklist } from "./student-foundation";
 
 export function ProfileEditor({ role }: { role: Role }) {
   const state = usePlatformData();
@@ -75,6 +77,7 @@ export function ProfileEditor({ role }: { role: Role }) {
         {data && !state.error && (
           <>
             {action.feedback}
+            {role === "student" && <StudentSetupChecklist data={data} />}
             <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(17rem,.7fr)]">
               <Card className="overflow-hidden">
                 <div className="h-20 role-gradient opacity-90" />
@@ -190,6 +193,25 @@ export function ProfileEditor({ role }: { role: Role }) {
                         onChange={(e) => setInterests(e.target.value)}
                       />
                     </Field>
+                    {role === "student" &&
+                      (data.profile.preferred_roles !== undefined ? (
+                        loadedId && (
+                          <CareerPreferences
+                            key={loadedId}
+                            form={form}
+                            change={change}
+                          />
+                        )
+                      ) : (
+                        <p
+                          role="status"
+                          className="rounded-2xl border border-border p-4 text-sm text-muted-foreground"
+                        >
+                          Career preferences will be available after the
+                          student-foundation database update. Your existing
+                          profile can still be saved.
+                        </p>
+                      ))}
                     <label className="flex items-start gap-3 rounded-2xl border border-border p-4">
                       <input
                         type="checkbox"
@@ -279,6 +301,7 @@ export function ProfileEditor({ role }: { role: Role }) {
                       <input
                         required
                         aria-label="New skill"
+                        list="profile-skill-options"
                         maxLength={100}
                         className="field min-w-0"
                         value={skill}
@@ -293,6 +316,7 @@ export function ProfileEditor({ role }: { role: Role }) {
                         Add
                       </Button>
                     </form>
+                    <SkillSuggestions id="profile-skill-options" />
                   </CardContent>
                 </Card>
                 {["student", "academician"].includes(role) && (

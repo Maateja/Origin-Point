@@ -1,10 +1,5 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { RoleOverview } from "@/components/dashboard/role-overview";
+import { StudentActionCenter } from "@/components/platform/student-action-center";
 
 export default function StudentDashboardPage() {
-  return (
-    <DashboardShell role="student" title="Dashboard">
-      <RoleOverview role="student" />
-    </DashboardShell>
-  );
+  return <StudentActionCenter />;
 }

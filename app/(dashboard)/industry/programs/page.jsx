@@ -1,5 +1,5 @@
-import { WorkspacePage } from "@/components/dashboard/workspace-page";
+import { LearningPrograms } from "@/components/platform/learning-programs";
 
 export default function IndustryProgramsPage() {
-  return <WorkspacePage role="industry" pageKey="industry/programs" />;
+  return <LearningPrograms role="industry" />;
 }

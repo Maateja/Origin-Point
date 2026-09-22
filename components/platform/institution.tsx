@@ -4,6 +4,9 @@ import { useState } from "react";
 import { Download, Users, ArrowUpRight } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { Button } from "@/components/ui/button";
+import { CareerPreferenceSummary } from "./student-foundation";
+import { uniqueSkills } from "@/lib/skill-taxonomy.mjs";
+import { MemberLearningSummary } from "./learning-plan";
 import {
   Card,
   CardContent,
@@ -76,7 +79,9 @@ export function InstitutionWorkspace({ view = "students" }: { view?: string }) {
   ];
   const demand = new Map<string, number>();
   data.opportunities.forEach((o) =>
-    o.skills.forEach((s) => demand.set(s, (demand.get(s) || 0) + 1)),
+    uniqueSkills(o.skills).forEach((s) =>
+      demand.set(s, (demand.get(s) || 0) + 1),
+    ),
   );
   const employers = data.directory.filter(
     (p) =>
@@ -121,7 +126,7 @@ export function InstitutionWorkspace({ view = "students" }: { view?: string }) {
           <Metric
             label="Job offers received"
             value={placed.size}
-            detail="Unique students with job offers"
+            detail="Stage-based count; see Recruitment Tracker for written offers and confirmed joining"
           />
           <Metric
             label="Placement offer rate"
@@ -225,7 +230,13 @@ export function InstitutionWorkspace({ view = "students" }: { view?: string }) {
                         {p.department || "Department not added"} ·{" "}
                         {p.program || "Program not added"}
                       </p>
+                      <div className="mt-3">
+                        <CareerPreferenceSummary profile={p} />
+                      </div>
                       <div className="mt-4 flex flex-wrap gap-1.5">
+                        {p.role === "student" && (
+                          <MemberLearningSummary userId={p.id} />
+                        )}
                         {p.skills.map((s) => (
                           <Tag key={s}>{s}</Tag>
                         ))}

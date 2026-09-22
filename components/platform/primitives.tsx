@@ -25,11 +25,7 @@ export function PageHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card p-6 shadow-sm md:p-9">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-32 h-80 w-80 rounded-full role-gradient opacity-[0.07] blur-2xl"
-      />
+    <section className="page-heading">
       <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
         <div className="max-w-2xl">
           <p className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] role-text">
@@ -98,7 +94,7 @@ export function Empty({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-dashed border-border bg-card/60 px-6 py-12 text-center">
+    <div className="glass-panel rounded-3xl px-6 py-12 text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl role-bg-soft role-text">
         <Inbox className="h-5 w-5" />
       </div>
@@ -114,26 +110,35 @@ export function Metric({
   label,
   value,
   detail,
+  icon,
 }: {
   label: string;
   value: string | number;
   detail?: string;
+  icon?: React.ReactNode;
 }) {
   return (
-    <Card>
+    <Card className="glass-metric">
       <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          <ArrowUpRight className="h-4 w-4 role-text opacity-60" />
-        </div>
-        <p className="mt-3 font-display text-3xl font-bold tracking-tight">
-          {value}
-        </p>
-        {detail && (
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            {detail}
-          </p>
+        {icon && (
+          <div className="glass-icon-tile" aria-hidden="true">
+            {icon}
+          </div>
         )}
+        <div className="glass-metric-copy">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <ArrowUpRight className="h-4 w-4 role-text opacity-60" />
+          </div>
+          <p className="mt-3 font-display text-3xl font-bold tracking-tight">
+            {value}
+          </p>
+          {detail && (
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {detail}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

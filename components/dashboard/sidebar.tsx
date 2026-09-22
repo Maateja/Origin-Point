@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { OriginWordmark } from "@/components/shared/origin-logo";
 import {
   GraduationCap,
+  CalendarDays,
   Building2,
   BookOpen,
   Landmark,
@@ -53,6 +54,12 @@ export const roleNavigation: Record<string, NavItem[]> = {
   student: [
     { label: "Dashboard", href: "/student", icon: LayoutDashboard },
     {
+      label: "Recruitment Tracker",
+      href: "/student/recruitment-tracker",
+      icon: CalendarDays,
+    },
+    { label: "Learning Programs", href: "/student/programs", icon: BookMarked },
+    {
       label: "Skill Assessment",
       href: "/student/assessment",
       icon: ClipboardCheck,
@@ -63,13 +70,38 @@ export const roleNavigation: Record<string, NavItem[]> = {
       icon: ClipboardCheck,
     },
     { label: "Career Readiness", href: "/student/readiness", icon: Target },
+    {
+      label: "Learning Plan",
+      href: "/student/learning-plan",
+      icon: BookMarked,
+    },
     { label: "Skill Report", href: "/student/report", icon: BarChart3 },
     { label: "Portfolio", href: "/student/portfolio", icon: FileText },
     { label: "Marketplace", href: "/student/marketplace", icon: Briefcase },
     { label: "Applications", href: "/student/applications", icon: Target },
+    {
+      label: "Internship Tracking",
+      href: "/student/internships",
+      icon: FolderKanban,
+    },
   ],
   industry: [
     { label: "Dashboard", href: "/industry", icon: LayoutDashboard },
+    {
+      label: "Collaborations",
+      href: "/industry/collaborations",
+      icon: Handshake,
+    },
+    {
+      label: "Recruitment Tracker",
+      href: "/industry/recruitment-tracker",
+      icon: CalendarDays,
+    },
+    {
+      label: "Assigned Supervision",
+      href: "/industry/supervision",
+      icon: UserCheck,
+    },
     {
       label: "Assessment Studio",
       href: "/industry/assessments",
@@ -79,9 +111,34 @@ export const roleNavigation: Record<string, NavItem[]> = {
     { label: "Candidates", href: "/industry/candidates", icon: Users },
     { label: "Shortlisted", href: "/industry/shortlist", icon: FolderKanban },
     { label: "Programs", href: "/industry/programs", icon: BookMarked },
+    {
+      label: "Internship Tracking",
+      href: "/industry/internships",
+      icon: FolderKanban,
+    },
   ],
   academician: [
     { label: "Dashboard", href: "/academician", icon: LayoutDashboard },
+    {
+      label: "Collaborations",
+      href: "/academician/collaborations",
+      icon: Handshake,
+    },
+    {
+      label: "Recruitment Tracker",
+      href: "/academician/recruitment-tracker",
+      icon: CalendarDays,
+    },
+    {
+      label: "Learning Programs",
+      href: "/academician/programs",
+      icon: BookMarked,
+    },
+    {
+      label: "Assigned Supervision",
+      href: "/academician/supervision",
+      icon: UserCheck,
+    },
     { label: "FDPs", href: "/academician/fdps", icon: BookMarked },
     { label: "Consultancy", href: "/academician/consultancy", icon: Handshake },
     { label: "Research", href: "/academician/research", icon: FlaskConical },
@@ -100,11 +157,31 @@ export const roleNavigation: Record<string, NavItem[]> = {
   ],
   institution: [
     { label: "Dashboard", href: "/institution", icon: LayoutDashboard },
+    {
+      label: "Collaborations",
+      href: "/institution/collaborations",
+      icon: Handshake,
+    },
+    {
+      label: "Recruitment Tracker",
+      href: "/institution/recruitment-tracker",
+      icon: CalendarDays,
+    },
+    {
+      label: "Learning Programs",
+      href: "/institution/programs",
+      icon: BookMarked,
+    },
     { label: "Skill Analytics", href: "/institution/skills", icon: BarChart3 },
     { label: "Placement", href: "/institution/placement", icon: TrendingUp },
     { label: "Recruitment", href: "/institution/recruitment", icon: PieChart },
     { label: "Students", href: "/institution/students", icon: UserCheck },
     { label: "Departments", href: "/institution/departments", icon: Building },
+    {
+      label: "Internship Tracking",
+      href: "/institution/internships",
+      icon: FolderKanban,
+    },
     {
       label: "Publish Collaboration",
       href: "/institution/publish",
@@ -171,7 +248,11 @@ export function Sidebar({ role = "student" }: SidebarProps) {
             (item.href !== `/${role}` && pathname.startsWith(item.href));
 
           return (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isActive ? "page" : undefined}
+            >
               <motion.div
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}

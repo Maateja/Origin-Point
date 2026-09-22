@@ -1,0 +1,15 @@
+# Interview scheduling and placement offers — increment 9
+
+Apply `supabase/migrations/202609220009_recruitment_workflow.sql` once after increment 8, then refresh.
+
+All four portals have Recruitment Tracker. The same interview/offer controls appear in Applications/Applicants. Only the opportunity owner schedules or cancels interviews; the applicant confirms or requests rescheduling with a note. Replacing a schedule cancels and preserves the prior entry. Times are stored as UTC timestamps and entered/displayed in the viewer's browser time zone. Cancellation does not rewind the recruitment stage. No attendance or interview outcome is inferred from elapsed time.
+
+Written placement offers apply only to Job opportunities. After shortlisting, owners can issue immutable compensation/conditions, a proposed joining date and an exact response deadline. Title and organization come from the existing opportunity. The applicant accepts or declines once before expiry; the owner can withdraw a pending offer. One offer per application is supported; amendments, reissue, rescinding accepted offers and dispute resolution are not implemented. Expiry is derived from the deadline, not written as a fabricated response. The application's Offered stage is separate from the recorded response.
+
+After the joining date (Asia/Kolkata), the employer can report actual joining and the applicant can confirm it. Only two-party confirmation marks the job application Completed. New direct Completed updates cannot bypass this check. Existing historical Completed rows remain untouched and do not become confirmed joinings automatically. The tracker shows written offer, accepted offer and confirmed joining counts separately; these are account confirmations, not independently verified employment records.
+
+Applicants, opportunity owners and approved institutions can view these records under application RLS. Assigned internship supervisors do not gain access to recruitment terms through supervision alone. Institutions cannot respond on behalf of students or employers. Recruitment actions add database-generated events to the application timeline. Times, compensation and offer conditions themselves stay in recruitment tables rather than being copied into supervisor-visible timeline messages.
+
+No email/SMS, calendar integration, meeting creation, e-signature, offer-letter PDF or public verification is included. A video meeting URL or phone instructions must be supplied by the recruiter. Users should not put passwords or access secrets into meeting instructions visible to approved institutions.
+
+Smoke test after migration: shortlist → schedule → request reschedule → replace schedule → confirm → issue a Job offer → accept → after the joining date, employer reports and applicant confirms → institution checks counts. Also test expiry, decline, withdrawal and unrelated-account isolation. Local automated tests use disposable PostgreSQL fixtures, not live records; real-account UI checks remain necessary after activation.

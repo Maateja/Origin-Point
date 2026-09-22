@@ -11,7 +11,15 @@ import {
 } from "@/lib/platform-store";
 import { useIndustryAssessments } from "@/lib/industry-assessments";
 import { explainReadiness } from "@/lib/readiness.mjs";
-import { DataState, Empty, Field, PageHeading, Tag } from "./primitives";
+import { skillKey } from "@/lib/skill-taxonomy.mjs";
+import {
+  DataState,
+  Empty,
+  Field,
+  PageHeading,
+  Tag,
+  Metric,
+} from "./primitives";
 import { SkillPassport } from "./skill-passport";
 export function ReadinessWorkspace() {
   const state = usePlatformData();
@@ -41,7 +49,7 @@ export function ReadinessWorkspace() {
     ) ?? [];
   const missing = requirements
     .filter((r) => r.status !== "Assessment-backed")
-    .map((r) => r.skill.toLowerCase());
+    .map((r) => skillKey(r.skill));
   const training =
     data?.opportunities.filter(
       (o) =>
@@ -49,7 +57,7 @@ export function ReadinessWorkspace() {
         ["Training", "Workshop", "Mentorship"].includes(o.type) &&
         ["student", "all"].includes(o.audience) &&
         isOpportunityOpen(o) &&
-        o.skills.some((s) => missing.includes(s.trim().toLowerCase())),
+        o.skills.some((s) => missing.includes(skillKey(s))),
     ) ?? [];
   return (
     <DashboardShell role="student" title="Career readiness">
@@ -106,14 +114,40 @@ export function ReadinessWorkspace() {
                         <p className="mt-4 text-xs leading-5 text-muted-foreground">
                           Qualification, availability, and proficiency rules are
                           not configured in this version. These checks do not
-                          establish full eligibility. Evidence uses exact
-                          skill-name matching and the most recent result, not
-                          just your best score.
+                          establish full eligibility. Evidence uses curated
+                          naming aliases and the most recent result, not just
+                          your best score.
                         </p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Metric
+                    label="Unique required skills"
+                    value={requirements.length}
+                  />
+                  <Metric
+                    label="Assessment-backed"
+                    value={
+                      requirements.filter(
+                        (r) => r.status === "Assessment-backed",
+                      ).length
+                    }
+                    detail="Latest result meets the assessment target"
+                  />
+                  <Metric
+                    label="Need stronger evidence"
+                    value={missing.length}
+                    detail="Unassessed claims, missing skills or below-target results"
+                  />
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Common names such as React and React.js are counted once.
+                  Related but different skills stay separate. Self-declared
+                  proficiency, project links and certificates do not
+                  automatically pass an assessment requirement.
+                </p>
                 <div>
                   <h2 className="font-display text-lg font-semibold">
                     Requirement-by-requirement evidence
@@ -190,6 +224,12 @@ export function ReadinessWorkspace() {
                       <h2 className="font-display text-lg font-semibold">
                         2. Find relevant learning
                       </h2>
+                      <Link
+                        href={"/student/learning-plan?target=" + target.id}
+                        className="mt-3 inline-block text-sm font-semibold role-text"
+                      >
+                        Turn these gaps into a saved learning plan →
+                      </Link>
                       <p className="mt-2 text-xs leading-5 text-muted-foreground">
                         Published programmes with skills overlapping your unmet
                         requirements. Attendance alone does not prove
@@ -206,9 +246,7 @@ export function ReadinessWorkspace() {
                             <p className="mt-1 text-xs text-muted-foreground">
                               {p.company} ·{" "}
                               {p.skills
-                                .filter((s) =>
-                                  missing.includes(s.trim().toLowerCase()),
-                                )
+                                .filter((s) => missing.includes(skillKey(s)))
                                 .join(", ")}
                             </p>
                           </Link>

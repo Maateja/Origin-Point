@@ -48,49 +48,46 @@ export function AIScreeningAssistant({
     null,
   );
   const [loadingStep, setLoadingStep] = useState<string>("");
+  const [consent, setConsent] = useState(false);
+  const [generationError, setGenerationError] = useState("");
 
   const focusOptions = [
     {
       id: "Balanced",
       label: "Balanced Evaluation",
-      desc: "Mix of architectural concepts, practical debugging, and scenario logic",
+      desc: "Mix of domain knowledge, practical tasks and workplace judgment",
     },
     {
-      id: "Core Architecture & Systems",
-      label: "Core Architecture",
-      desc: "Deep dive into system design, state management, and framework internals",
+      id: "Core domain knowledge",
+      label: "Domain Knowledge",
+      desc: "Fundamentals and methods relevant to the supplied role and skills",
     },
     {
-      id: "Production Debugging & Scenarios",
-      label: "Production Debugging",
-      desc: "Live incident resolution, concurrency, error recovery, and security",
+      id: "Practical problem solving",
+      label: "Practical Scenarios",
+      desc: "Troubleshooting, quality checks and everyday decisions in this domain",
     },
     {
-      id: "Algorithmic & Data Structures",
-      label: "Algorithmic & Logic",
-      desc: "Optimization, memory footprint, time complexity, and data structures",
+      id: "Workplace reasoning and communication",
+      label: "Reasoning & Communication",
+      desc: "Job-related reasoning, collaboration and situational judgment",
     },
   ];
 
   async function handleGenerate() {
     setIsLoading(true);
-    setLoadingStep("Analyzing role requirements and required competencies...");
-
-    const stepTimer = setTimeout(() => {
-      setLoadingStep("Calibrating question difficulty & scenario complexity...");
-    }, 1200);
-
-    const stepTimer2 = setTimeout(() => {
-      setLoadingStep("Formulating plausible distractors & validation keys...");
-    }, 2400);
+    setLoadingStep("Waiting for Gemini to return a draft…");
+    setGenerationError("");
+    setLastGeneratedCount(null);
 
     try {
       const res = await fetch("/api/ai/generate-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: roleTitle || "Technical Candidate",
-          skills: skills.length > 0 ? skills : ["Software Engineering"],
+          title: roleTitle,
+          skills,
+          consent,
           description: description || "",
           difficulty,
           categoryFocus,
@@ -98,9 +95,6 @@ export function AIScreeningAssistant({
           count,
         }),
       });
-
-      clearTimeout(stepTimer);
-      clearTimeout(stepTimer2);
 
       const resData = await res.json();
       if (!res.ok) {
@@ -112,7 +106,7 @@ export function AIScreeningAssistant({
         const suggestedTitle = roleTitle
           ? `${roleTitle} Competency Screening (${difficulty})`
           : undefined;
-        const suggestedSummary = `Proctored ${resData.questions.length}-question assessment evaluating ${skills.slice(0, 3).join(", ") || "core competency"} (${difficulty}). Fullscreen Safe Exam mode enforced with strict proctoring verification.`;
+        const suggestedSummary = `Draft ${resData.questions.length}-question assessment covering ${skills.slice(0, 3).join(", ")} (${difficulty}). Questions and answer keys require author review before publication.`;
 
         onQuestionsGenerated(resData.questions, {
           title: suggestedTitle,
@@ -120,7 +114,7 @@ export function AIScreeningAssistant({
         });
       }
     } catch (err: any) {
-      alert(err.message || "Failed to generate questions");
+      setGenerationError(err.message || "Failed to generate questions");
     } finally {
       setIsLoading(false);
       setLoadingStep("");
@@ -128,9 +122,7 @@ export function AIScreeningAssistant({
   }
 
   return (
-    <div
-      className={`rounded-2xl border border-amber-500/25 bg-gradient-to-b from-amber-500/[0.04] via-background to-background p-5 shadow-sm transition-all ${className}`}
-    >
+    <div className={`glass-panel rounded-2xl p-5 transition-all ${className}`}>
       {/* Header & Badges */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
@@ -146,15 +138,18 @@ export function AIScreeningAssistant({
             </h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            Generate custom screening questions tailored directly to this role&apos;s
-            job description, required tech stack, and experience level.
+            Generate custom screening questions tailored directly to this
+            role&apos;s job description, required tech stack, and experience
+            level.
           </p>
         </div>
 
         <Button
           type="button"
           onClick={handleGenerate}
-          disabled={isLoading}
+          disabled={
+            isLoading || !consent || !roleTitle.trim() || !skills.length
+          }
           className="relative overflow-hidden bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white font-medium shadow-md shadow-amber-500/10 shrink-0 cursor-pointer h-9 px-4 text-xs"
         >
           {isLoading ? (
@@ -170,6 +165,23 @@ export function AIScreeningAssistant({
           )}
         </Button>
       </div>
+
+      <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+        />
+        Allow sending this role title, skill list, description and custom topics
+        to Google Gemini. Do not include personal or confidential information.
+        Generated questions are unverified drafts; review every answer before
+        publishing.
+      </label>
+      {generationError && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {generationError}
+        </p>
+      )}
 
       {/* Live JD & Skill Anchors Banner */}
       <div className="mt-4 rounded-xl border border-border/80 bg-muted/30 p-3 text-xs space-y-2">
@@ -199,7 +211,8 @@ export function AIScreeningAssistant({
         ) : (
           <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
             <Info className="h-3 w-3 text-amber-500" />
-            No skills detected on this role yet. We will formulate general software engineering questions or use your custom topics below.
+            No skills detected on this role yet. We will formulate general
+            software engineering questions or use your custom topics below.
           </p>
         )}
       </div>
@@ -212,29 +225,25 @@ export function AIScreeningAssistant({
             <Zap className="h-3 w-3 text-amber-500" /> Difficulty Level
           </label>
           <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 border border-border">
-            {(
-              [
-                "Junior / Intern",
-                "Mid-Level",
-                "Senior / Lead",
-              ] as const
-            ).map((lvl) => {
-              const active = difficulty === lvl;
-              return (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => setDifficulty(lvl)}
-                  className={`rounded-lg py-1.5 text-[11px] font-medium transition-all cursor-pointer ${
-                    active
-                      ? "bg-background text-foreground shadow-sm font-semibold ring-1 ring-border"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {lvl.split(" ")[0]}
-                </button>
-              );
-            })}
+            {(["Junior / Intern", "Mid-Level", "Senior / Lead"] as const).map(
+              (lvl) => {
+                const active = difficulty === lvl;
+                return (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setDifficulty(lvl)}
+                    className={`rounded-lg py-1.5 text-[11px] font-medium transition-all cursor-pointer ${
+                      active
+                        ? "bg-background text-foreground shadow-sm font-semibold ring-1 ring-border"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {lvl.split(" ")[0]}
+                  </button>
+                );
+              },
+            )}
           </div>
         </div>
 
@@ -296,7 +305,8 @@ export function AIScreeningAssistant({
             <ChevronDown className="h-3.5 w-3.5" />
           )}
           <span>
-            {showAdvanced ? "Hide" : "Add"} Custom JD snippets or target focus topics
+            {showAdvanced ? "Hide" : "Add"} Custom JD snippets or target focus
+            topics
           </span>
           {customTopics && (
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -306,7 +316,9 @@ export function AIScreeningAssistant({
         {showAdvanced && (
           <div className="mt-2 space-y-2 rounded-xl border border-border bg-background p-3">
             <p className="text-[11px] text-muted-foreground">
-              Paste specific paragraphs from your internal JD, required APIs (e.g. Next.js App Router, gRPC, Redis caching), or edge-case engineering scenarios you want candidates tested on:
+              Paste specific paragraphs from your internal JD, required APIs
+              (e.g. Next.js App Router, gRPC, Redis caching), or edge-case
+              engineering scenarios you want candidates tested on:
             </p>
             <textarea
               className="field min-h-20 text-xs font-mono"
@@ -338,7 +350,10 @@ export function AIScreeningAssistant({
           <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
             <span>
-              Successfully populated <strong>{lastGeneratedCount} questions</strong> calibrated for <strong>{difficulty}</strong> candidates. Review and edit the answer keys below!
+              Successfully populated{" "}
+              <strong>{lastGeneratedCount} draft questions</strong> generated
+              for <strong>{difficulty}</strong> candidates. Review and edit the
+              answer keys below!
             </span>
           </div>
         </div>

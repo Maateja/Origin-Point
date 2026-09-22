@@ -1,10 +1,5 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { RoleOverview } from "@/components/dashboard/role-overview";
+import { AcademicianCommandCenter } from "@/components/platform/academician-command-center";
 
 export default function AcademicianDashboardPage() {
-  return (
-    <DashboardShell role="academician" title="Dashboard">
-      <RoleOverview role="academician" />
-    </DashboardShell>
-  );
+  return <AcademicianCommandCenter />;
 }

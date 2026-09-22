@@ -3,6 +3,7 @@
 import useSWR, { mutate } from "swr";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { skillMatch, uniqueSkills } from "@/lib/skill-taxonomy.mjs";
 
 export type Role = "student" | "industry" | "academician" | "institution";
 export type OpportunityType =
@@ -39,6 +40,10 @@ export interface Profile {
   website: string;
   interests: string[];
   discoverable: boolean;
+  preferred_roles?: string[];
+  preferred_locations?: string[];
+  preferred_work_modes?: string[];
+  available_from?: string | null;
 }
 export interface DirectoryPerson extends Partial<Profile> {
   id: string;
@@ -65,6 +70,10 @@ export interface PortfolioRecord {
   expires_on: string | null;
   document_path: string | null;
   verified_at: string | null;
+  proficiency?: "" | "Beginner" | "Intermediate" | "Advanced";
+  associated_skills?: string[];
+  credential_id?: string;
+  contribution?: string;
   created_at: string;
 }
 export interface Opportunity {
@@ -219,7 +228,17 @@ export function useAuthCacheBoundary() {
         void mutate(
           (key) =>
             typeof key === "string" &&
-            ["/api/platform", "/api/industry-assessments"].includes(key),
+            [
+              "/api/platform",
+              "/api/industry-assessments",
+              "/api/learning-goals",
+              "/api/learning-programs",
+              "/api/recruitment",
+              "/api/notifications",
+              "/api/collaborations",
+              "/api/application-tracking",
+              "/api/supervision",
+            ].includes(key),
           undefined,
           { revalidate: !!nextUser },
         );
@@ -231,12 +250,24 @@ export function useAuthCacheBoundary() {
 }
 export async function refreshPlatform() {
   await mutate(KEY);
+  // An optional tracking migration must not make a saved decision look failed.
+  await mutate("/api/application-tracking").catch(() => undefined);
 }
 export async function clearPlatformCache() {
   await mutate(
     (key) =>
       typeof key === "string" &&
-      ["/api/platform", "/api/industry-assessments"].includes(key),
+      [
+        "/api/platform",
+        "/api/industry-assessments",
+        "/api/learning-goals",
+        "/api/learning-programs",
+        "/api/recruitment",
+        "/api/notifications",
+        "/api/collaborations",
+        "/api/application-tracking",
+        "/api/supervision",
+      ].includes(key),
     undefined,
     { revalidate: false },
   );
@@ -260,31 +291,19 @@ export const nextStatuses: Record<ApplicationStatus, ApplicationStatus[]> = {
   Completed: [],
 };
 export function getMatchScore(required: string[], candidate: string[] = []) {
-  const skills = [...new Set(required.map(normaliseSkill).filter(Boolean))];
-  if (!skills.length) return 0;
-  const actual = new Set(candidate.map(normaliseSkill));
-  return Math.round(
-    (skills.filter((skill) => actual.has(skill)).length / skills.length) * 100,
-  );
-}
-function normaliseSkill(skill: string) {
-  return skill.trim().toLowerCase();
+  return skillMatch(required, candidate).score;
 }
 export function getMatchedSkills(required: string[], candidate: string[] = []) {
-  return required.filter((s) =>
-    candidate.some((c) => normaliseSkill(c) === normaliseSkill(s)),
-  );
+  return skillMatch(required, candidate).matched;
 }
 export function getMissingSkills(required: string[], candidate: string[] = []) {
-  return required.filter(
-    (s) => !candidate.some((c) => normaliseSkill(c) === normaliseSkill(s)),
-  );
+  return skillMatch(required, candidate).missing;
 }
 export function ownSkills(data?: PlatformData) {
-  return (
+  return uniqueSkills(
     data?.records
       ?.filter((r) => r.user_id === data?.profile?.id && r.kind === "skill")
-      ?.map((r) => r.title) ?? []
+      ?.map((r) => r.title) ?? [],
   );
 }
 export function isOpportunityOpen(opportunity: Opportunity) {
@@ -308,6 +327,10 @@ export async function saveProfile(input: Partial<Profile>) {
     "website",
     "interests",
     "discoverable",
+    "preferred_roles",
+    "preferred_locations",
+    "preferred_work_modes",
+    "available_from",
   ] as const;
   const fields = Object.fromEntries(
     editable
@@ -358,9 +381,65 @@ export async function addRecord(
     issued_on: input.issued_on || null,
     expires_on: input.expires_on || null,
     document_path: path,
+    ...recordDetails(input),
   });
   if (error && path)
     await supabase.storage.from("portfolio-documents").remove([path]);
+  check(error);
+  await refreshPlatform();
+}
+function recordDetails(input: Partial<PortfolioRecord>) {
+  return Object.fromEntries(
+    (
+      [
+        "proficiency",
+        "associated_skills",
+        "credential_id",
+        "contribution",
+      ] as const
+    )
+      .filter((key) => input[key] !== undefined)
+      .map((key) => [key, input[key]]),
+  );
+}
+export async function updateRecord(
+  record: PortfolioRecord,
+  input: Partial<PortfolioRecord>,
+) {
+  const id = await userId();
+  if (record.verified_at)
+    throw new Error(
+      "Verified records cannot be edited. Add a new record instead.",
+    );
+  const fields = Object.fromEntries(
+    (
+      [
+        "title",
+        "organization",
+        "description",
+        "url",
+        "issued_on",
+        "expires_on",
+      ] as const
+    )
+      .filter((key) => input[key] !== undefined)
+      .map((key) => [
+        key,
+        key === "title"
+          ? input.title?.trim()
+          : ["issued_on", "expires_on"].includes(key)
+            ? input[key] || null
+            : input[key],
+      ]),
+  );
+  const { error } = await supabase
+    .from("portfolio_records")
+    .update({ ...fields, ...recordDetails(input) })
+    .eq("id", record.id)
+    .eq("user_id", id)
+    .is("verified_at", null)
+    .select("id")
+    .single();
   check(error);
   await refreshPlatform();
 }
@@ -452,7 +531,10 @@ export async function createOpportunity(
           title: input.attachedAssessment.title,
           summary: input.attachedAssessment.summary,
           opportunity_id: data.id,
-          passing_score: input.attachedAssessment.passingScore || input.assessmentCutoff || 70,
+          passing_score:
+            input.attachedAssessment.passingScore ||
+            input.assessmentCutoff ||
+            70,
           publish: true,
           questions: input.attachedAssessment.questions,
         }),
@@ -469,7 +551,10 @@ export async function createOpportunity(
   await refreshPlatform();
   return data;
 }
-export async function autoShortlistCandidates(opportunityId: string, minScore?: number) {
+export async function autoShortlistCandidates(
+  opportunityId: string,
+  minScore?: number,
+) {
   const { data, error } = await supabase.rpc("auto_shortlist_candidates", {
     opportunity_id: opportunityId,
     min_score: minScore ?? null,
